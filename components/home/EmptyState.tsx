@@ -1,6 +1,11 @@
+"use client";
+
 import { ArrowUpRight } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function EmptyState() {
+  const router = useRouter();
+
   return (
     <div className="px-12 w-full pb-12">
       <section className="pt-8">
@@ -26,6 +31,7 @@ export default function EmptyState() {
             <div className="flex gap-2">
               <button 
                 type="button"
+                onClick={() => router.push(`/workflow/${Date.now()}`)}
                 className="inline-flex shrink-0 items-center justify-center gap-2 text-[14px] font-medium transition-all outline-none bg-white text-black hover:bg-zinc-200 h-10 px-10 rounded-full" 
               >
                 New Workflow
