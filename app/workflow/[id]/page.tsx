@@ -1,7 +1,7 @@
 "use client";
 
-import { use, useState } from "react";
-import { ReactFlow, Background, BackgroundVariant } from "@xyflow/react";
+import { use, useState, useCallback } from "react";
+import { ReactFlow, Background, BackgroundVariant, useNodesState, useEdgesState, addEdge, type Node, type Connection } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import Sidebar from "@/components/home/Sidebar";
 import {
@@ -24,11 +24,39 @@ export default function WorkflowEditor({
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [activeTool, setActiveTool] = useState("cursor");
 
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+  const handleAddNode = useCallback((nodeType: string) => {
+    const randomOffset = Math.floor(Math.random() * 100);
+    const newNode: Node = {
+      id: `${nodeType.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`,
+      position: { x: 200 + randomOffset, y: 150 + randomOffset },
+      data: { label: nodeType },
+      style: {
+        background: '#1a1a1a',
+        color: '#fff',
+        border: '1px solid #262626',
+        borderRadius: '8px',
+        padding: '12px 16px',
+        fontSize: '14px',
+        fontFamily: 'inherit',
+      }
+    };
+    setNodes((nds) => nds.concat(newNode));
+  }, [setNodes]);
+
+  const onConnect = useCallback(
+    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
+    [setEdges]
+  );
+
   return (
     <div className="flex w-screen h-screen bg-[#0a0a0a] text-zinc-100 overflow-hidden font-sans">
       <Sidebar
         isCollapsed={isCollapsed}
         toggleCollapse={() => setIsCollapsed(!isCollapsed)}
+        onAddNode={handleAddNode}
       />
 
       <main
@@ -97,11 +125,11 @@ export default function WorkflowEditor({
         {/* React Flow Canvas */}
         <div className="absolute inset-0 z-0">
           <ReactFlow
-            nodes={[]}
-            edges={[]}
-            onNodesChange={() => {}}
-            onEdgesChange={() => {}}
-            onConnect={() => {}}
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
             fitView
             className="dark"
             proOptions={{ hideAttribution: true }}
