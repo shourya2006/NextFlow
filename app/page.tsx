@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Sidebar from "@/components/Sidebar";
-import Hero from "@/components/Hero";
-import Tabs from "@/components/Tabs";
-import WorkflowsGrid from "@/components/WorkflowsGrid";
-import EmptyState from "@/components/EmptyState";
+import Sidebar from "@/components/home/Sidebar";
+import Hero from "@/components/home/Hero";
+import Tabs from "@/components/home/Tabs";
+import WorkflowsGrid from "@/components/home/WorkflowsGrid";
+import EmptyState from "@/components/home/EmptyState";
 
 export default function Home() {
   const [isCollapsed, setIsCollapsed] = useState(false);
