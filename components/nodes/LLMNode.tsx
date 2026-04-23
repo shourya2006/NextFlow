@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Handle, Position, useReactFlow } from "@xyflow/react";
 import { BrainCircuit, ChevronDown, ChevronRight, Pencil } from "lucide-react";
+import RunWorkflowButton from "./RunWorkflowButton";
 
 export default function LLMNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -22,7 +23,8 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
   };
 
   return (
-    <div className="relative font-sans mt-8">
+    <div className="relative font-sans mt-8 group">
+      <RunWorkflowButton nodeId={id} selected={selected} />
       
       <div className="absolute -top-7 left-1 flex items-center gap-2">
         <div className="text-[#10b981]">

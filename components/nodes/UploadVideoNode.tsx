@@ -1,9 +1,11 @@
 import { Handle, Position } from "@xyflow/react";
 import { Video, Upload } from "lucide-react";
+import RunWorkflowButton from "./RunWorkflowButton";
 
-export default function UploadVideoNode({ data, selected }: { data: any, selected?: boolean }) {
+export default function UploadVideoNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
   return (
-    <div className="relative font-sans mt-8">
+    <div className="relative font-sans mt-8 group">
+      <RunWorkflowButton nodeId={id} selected={selected} />
       
       <div className="absolute -top-7 left-1 flex items-center gap-2">
         <div className="text-[#a855f7]">

@@ -1,5 +1,6 @@
 import { Handle, Position, useReactFlow } from "@xyflow/react";
 import { Frame, Image as ImageIcon } from "lucide-react";
+import RunWorkflowButton from "./RunWorkflowButton";
 
 export default function ExtractFrameNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
   const { setNodes } = useReactFlow();
@@ -17,7 +18,8 @@ export default function ExtractFrameNode({ id, data, selected }: { id: string, d
   };
 
   return (
-    <div className="relative font-sans mt-8">
+    <div className="relative font-sans mt-8 group">
+      <RunWorkflowButton nodeId={id} selected={selected} />
       
       <div className="absolute -top-7 left-1 flex items-center gap-2">
         <div className="text-[#6366f1]">

@@ -10,6 +10,7 @@ import {
   addEdge,
   type Node,
   type Connection,
+  type Edge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import Sidebar from "@/components/home/Sidebar";
@@ -49,7 +50,7 @@ export default function WorkflowEditor({
   };
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   const handleAddNode = useCallback(
     (nodeType: string) => {
@@ -124,6 +125,7 @@ export default function WorkflowEditor({
             Untitled
           </button>
         </div>
+
 
         {/* Center Screen TEXT */}
         {nodes.length === 0 && (
