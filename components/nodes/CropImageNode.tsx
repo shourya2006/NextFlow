@@ -1,7 +1,15 @@
-import { Handle, Position } from "@xyflow/react";
+import { Handle, Position, useReactFlow } from "@xyflow/react";
 import { Crop, Upload } from "lucide-react";
 
-export default function CropImageNode({ data, selected }: { data: any, selected?: boolean }) {
+export default function CropImageNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
+  const { setNodes } = useReactFlow();
+
+  const handleParamChange = (param: string, value: string) => {
+    setNodes((ele) => 
+      ele.map((n) => (n.id === id ? { ...n, data: { ...n.data, [param]: parseFloat(value) || 0 } } : n))
+    );
+  };
+
   return (
     <div className="relative font-sans mt-8">
       
@@ -42,7 +50,12 @@ export default function CropImageNode({ data, selected }: { data: any, selected?
             <div className="flex items-center justify-between bg-[#121212] border border-[#262626] rounded-lg px-2.5 py-1.5 focus-within:border-[#14b8a6] transition-colors">
               <span className="text-zinc-500 text-[11px] font-bold w-4">X</span>
               <div className="flex items-center">
-                <input type="number" defaultValue={0} className="w-10 bg-transparent text-zinc-300 text-[12px] text-right outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none m-0 [-moz-appearance:textfield]" />
+                <input 
+                  type="number" 
+                  value={data.x ?? 0} 
+                  onChange={(e) => handleParamChange('x', e.target.value)}
+                  className="w-10 bg-transparent text-zinc-300 text-[12px] text-right outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none m-0 [-moz-appearance:textfield]" 
+                />
                 <span className="text-zinc-600 text-[12px] ml-1">%</span>
               </div>
             </div>
@@ -50,7 +63,12 @@ export default function CropImageNode({ data, selected }: { data: any, selected?
             <div className="flex items-center justify-between bg-[#121212] border border-[#262626] rounded-lg px-2.5 py-1.5 focus-within:border-[#14b8a6] transition-colors">
               <span className="text-zinc-500 text-[11px] font-bold w-4">Y</span>
               <div className="flex items-center">
-                <input type="number" defaultValue={0} className="w-10 bg-transparent text-zinc-300 text-[12px] text-right outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none m-0 [-moz-appearance:textfield]" />
+                <input 
+                  type="number" 
+                  value={data.y ?? 0} 
+                  onChange={(e) => handleParamChange('y', e.target.value)}
+                  className="w-10 bg-transparent text-zinc-300 text-[12px] text-right outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none m-0 [-moz-appearance:textfield]" 
+                />
                 <span className="text-zinc-600 text-[12px] ml-1">%</span>
               </div>
             </div>
@@ -58,7 +76,12 @@ export default function CropImageNode({ data, selected }: { data: any, selected?
             <div className="flex items-center justify-between bg-[#121212] border border-[#262626] rounded-lg px-2.5 py-1.5 focus-within:border-[#14b8a6] transition-colors">
               <span className="text-zinc-500 text-[11px] font-bold w-4">W</span>
               <div className="flex items-center">
-                <input type="number" defaultValue={100} className="w-10 bg-transparent text-zinc-300 text-[12px] text-right outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none m-0 [-moz-appearance:textfield]" />
+                <input 
+                  type="number" 
+                  value={data.w ?? 100} 
+                  onChange={(e) => handleParamChange('w', e.target.value)}
+                  className="w-10 bg-transparent text-zinc-300 text-[12px] text-right outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none m-0 [-moz-appearance:textfield]" 
+                />
                 <span className="text-zinc-600 text-[12px] ml-1">%</span>
               </div>
             </div>
@@ -66,7 +89,12 @@ export default function CropImageNode({ data, selected }: { data: any, selected?
             <div className="flex items-center justify-between bg-[#121212] border border-[#262626] rounded-lg px-2.5 py-1.5 focus-within:border-[#14b8a6] transition-colors">
               <span className="text-zinc-500 text-[11px] font-bold w-4">H</span>
               <div className="flex items-center">
-                <input type="number" defaultValue={100} className="w-10 bg-transparent text-zinc-300 text-[12px] text-right outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none m-0 [-moz-appearance:textfield]" />
+                <input 
+                  type="number" 
+                  value={data.h ?? 100} 
+                  onChange={(e) => handleParamChange('h', e.target.value)}
+                  className="w-10 bg-transparent text-zinc-300 text-[12px] text-right outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none m-0 [-moz-appearance:textfield]" 
+                />
                 <span className="text-zinc-600 text-[12px] ml-1">%</span>
               </div>
             </div>

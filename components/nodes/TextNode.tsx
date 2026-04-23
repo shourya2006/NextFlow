@@ -1,7 +1,15 @@
-import { Handle, Position } from "@xyflow/react";
+import { Handle, Position, useReactFlow } from "@xyflow/react";
 import { Type, Pencil, Copy } from "lucide-react";
 
-export default function TextNode({ data, selected }: { data: any, selected?: boolean }) {
+export default function TextNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
+  const { setNodes } = useReactFlow();
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNodes((nds) => 
+      nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, text: e.target.value } } : n))
+    );
+  };
+
   return (
     <div className="relative font-sans mt-8">
       
@@ -43,6 +51,8 @@ export default function TextNode({ data, selected }: { data: any, selected?: boo
         <div className="px-3 pb-3">
           <div className="relative">
             <textarea
+              value={data.text || ""}
+              onChange={handleTextChange}
               className="w-full bg-[#121212] text-zinc-200 text-[14px] rounded-xl p-3 min-h-[100px] outline-none border border-transparent focus:border-[#eab308] transition-colors resize-y [&::-webkit-resizer]:hidden"
               placeholder="Write something"
               spellCheck={false}

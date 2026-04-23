@@ -1,12 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { Handle, Position } from "@xyflow/react";
+import { Handle, Position, useReactFlow } from "@xyflow/react";
 import { BrainCircuit, ChevronDown, ChevronRight, Pencil } from "lucide-react";
 
-export default function LLMNode({ data, selected }: { data: any, selected?: boolean }) {
+export default function LLMNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false);
+  const { setNodes } = useReactFlow();
+
+  const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNodes((nds) => 
+      nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, prompt: e.target.value } } : n))
+    );
+  };
+
+  const handleSystemPromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNodes((nds) => 
+      nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, systemPrompt: e.target.value } } : n))
+    );
+  };
 
   return (
     <div className="relative font-sans mt-8">
@@ -50,6 +63,8 @@ export default function LLMNode({ data, selected }: { data: any, selected?: bool
           </div>
           <div className="relative">
             <textarea
+              value={data.prompt || ""}
+              onChange={handlePromptChange}
               className="w-full bg-[#121212] text-zinc-200 text-[14px] rounded-xl p-3 min-h-[120px] outline-none border border-transparent focus:border-[#10b981] transition-colors resize-y [&::-webkit-resizer]:hidden"
               placeholder="A beautiful sunset over a calm ocean"
               spellCheck={false}
@@ -119,6 +134,8 @@ export default function LLMNode({ data, selected }: { data: any, selected?: bool
               {isSystemPromptOpen && (
                 <div className="relative mt-1">
                   <textarea
+                    value={data.systemPrompt || ""}
+                    onChange={handleSystemPromptChange}
                     className="w-full bg-[#121212] text-zinc-200 text-[14px] rounded-xl p-3 min-h-[80px] outline-none border border-transparent focus:border-[#ec4899] transition-colors resize-y [&::-webkit-resizer]:hidden"
                     placeholder="Enter system instructions..."
                     spellCheck={false}

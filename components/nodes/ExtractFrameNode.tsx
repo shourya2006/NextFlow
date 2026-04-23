@@ -1,7 +1,21 @@
-import { Handle, Position } from "@xyflow/react";
+import { Handle, Position, useReactFlow } from "@xyflow/react";
 import { Frame, Image as ImageIcon } from "lucide-react";
 
-export default function ExtractFrameNode({ data, selected }: { data: any, selected?: boolean }) {
+export default function ExtractFrameNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
+  const { setNodes } = useReactFlow();
+
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNodes((nds) => 
+      nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, videoUrl: e.target.value } } : n))
+    );
+  };
+
+  const handleTimestampChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNodes((nds) => 
+      nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, timestamp: parseFloat(e.target.value) || 0 } } : n))
+    );
+  };
+
   return (
     <div className="relative font-sans mt-8">
       
@@ -42,6 +56,8 @@ export default function ExtractFrameNode({ data, selected }: { data: any, select
             <span className="text-zinc-400 text-[12px] font-medium">Video URL</span>
             <input 
               type="text" 
+              value={data.videoUrl || ""}
+              onChange={handleUrlChange}
               placeholder="https://..." 
               className="w-full bg-[#121212] text-zinc-200 text-[13px] rounded-lg px-3 py-2 outline-none border border-[#262626] focus:border-[#6366f1] transition-colors"
             />
@@ -53,7 +69,8 @@ export default function ExtractFrameNode({ data, selected }: { data: any, select
               <div className="flex items-center">
                 <input 
                   type="number" 
-                  defaultValue={0} 
+                  value={data.timestamp ?? 0} 
+                  onChange={handleTimestampChange}
                   step="0.1"
                   className="w-12 bg-transparent text-zinc-300 text-[13px] text-right outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none m-0 [-moz-appearance:textfield]" 
                 />
