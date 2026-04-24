@@ -2,17 +2,23 @@
 
 import { useState } from "react";
 import { Handle, Position, useReactFlow, useEdges, useNodes } from "@xyflow/react";
-import { BrainCircuit, ChevronDown, ChevronRight, Pencil } from "lucide-react";
+import { BrainCircuit, ChevronDown, Image as ImageIcon } from "lucide-react";
 import RunWorkflowButton from "./RunWorkflowButton";
+import OutputModal from "./OutputModal";
+
+const MODELS = [
+  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  { id: "gemini-3.1-flash-lite-preview", label: "Gemini 3.1 Flash Lite" },
+  { id: "gemma-3-1b-it", label: "Gemma 3 1B" },
+];
 
 export default function LLMNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false);
+  const [isModelOpen, setIsModelOpen] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const { setNodes } = useReactFlow();
   const edges = useEdges();
   const nodes = useNodes();
 
-  // Handle prompt connection
   const promptEdge = edges.find(e => e.target === id && e.targetHandle === "prompt");
   const promptSourceNode = promptEdge ? nodes.find(n => n.id === promptEdge.source) : null;
   const isPromptConnected = !!promptEdge;
@@ -20,13 +26,22 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
     ? (promptSourceNode.data.output || promptSourceNode.data.text || "")
     : (data.prompt || "");
 
-  // Handle system prompt connection
   const systemEdge = edges.find(e => e.target === id && e.targetHandle === "system");
   const systemSourceNode = systemEdge ? nodes.find(n => n.id === systemEdge.source) : null;
   const isSystemConnected = !!systemEdge;
   const systemValue = isSystemConnected && systemSourceNode
     ? (systemSourceNode.data.output || systemSourceNode.data.text || "")
     : (data.systemPrompt || "");
+
+  const imageEdge = edges.find(e => e.target === id && e.targetHandle === "image");
+  const imageSourceNode = imageEdge ? nodes.find(n => n.id === imageEdge.source) : null;
+  const isImageConnected = !!imageEdge;
+  const imageValue = isImageConnected && imageSourceNode
+    ? (imageSourceNode.data.output || "")
+    : "";
+
+  const selectedModel = data.model || "gemini-2.0-flash";
+  const selectedModelLabel = MODELS.find(m => m.id === selectedModel)?.label || "Gemini 2.0 Flash";
 
   const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (isPromptConnected) return;
@@ -42,6 +57,13 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
     );
   };
 
+  const handleModelSelect = (modelId: string) => {
+    setNodes((nds) =>
+      nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, model: modelId } } : n))
+    );
+    setIsModelOpen(false);
+  };
+
   return (
     <div className="relative font-sans mt-8 group">
       <RunWorkflowButton nodeId={id} selected={selected} />
@@ -53,21 +75,44 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
         <span className="text-[14px] font-medium text-zinc-400">LLM</span>
       </div>
 
-      <div className={`bg-[#1c1c1c] w-[280px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] transition-all pb-4 ${selected ? 'ring-2 ring-[#10b981]' : ''}`}>
+      <div className={`bg-[#1c1c1c] w-[280px] rounded-2xl shadow-xl overflow-visible border border-[#262626] transition-all pb-4 ${selected ? 'ring-2 ring-[#10b981]' : ''}`}>
 
         <Handle
           type="source"
           position={Position.Right}
-          className="w-4 h-4 bg-[#3b82f6] border-4 border-[#1c1c1c] rounded-full right-[-8px] top-[32px] transform-none z-10"
+          className="w-4 h-4 bg-[#10b981] border-4 border-[#1c1c1c] rounded-full right-[-8px] top-[32px] transform-none z-10"
           style={{ transform: "translateY(-50%)" }}
         />
 
         <div className="px-4 pt-4 pb-2 flex items-center justify-between relative">
           <span className="text-zinc-400 text-[13px] font-medium">Model</span>
-          <div className="flex items-center gap-2 bg-[#121212] border border-[#262626] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[#1a1a1a] transition-colors">
-            <BrainCircuit size={14} className="text-zinc-400" />
-            <span className="text-zinc-200 text-[13px] font-medium">GPT-4o</span>
-            <ChevronDown size={14} className="text-zinc-500 ml-2" />
+          <div className="relative">
+            <button 
+              onClick={() => setIsModelOpen(!isModelOpen)}
+              className="flex items-center gap-2 bg-[#121212] border border-[#262626] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[#1a1a1a] transition-colors"
+            >
+              <BrainCircuit size={14} className="text-[#10b981]" />
+              <span className="text-zinc-200 text-[13px] font-medium">{selectedModelLabel}</span>
+              <ChevronDown size={14} className="text-zinc-500 ml-1" />
+            </button>
+
+            {isModelOpen && (
+              <div className="absolute top-full right-0 mt-1 w-[180px] bg-[#1c1c1c] border border-[#262626] rounded-xl shadow-2xl z-50 overflow-hidden">
+                {MODELS.map((model) => (
+                  <button
+                    key={model.id}
+                    onClick={() => handleModelSelect(model.id)}
+                    className={`w-full text-left px-3 py-2 text-[13px] transition-colors ${
+                      selectedModel === model.id 
+                        ? "bg-[#10b981]/10 text-[#10b981]" 
+                        : "text-zinc-300 hover:bg-[#262626]"
+                    }`}
+                  >
+                    {model.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -79,20 +124,16 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
             className="w-4 h-4 bg-[#eab308] border-4 border-[#1c1c1c] rounded-full left-[-8px] top-[24px] transform-none z-10"
             style={{ transform: "translateY(-50%)" }}
           />
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-zinc-400 text-[13px] font-medium">Prompt</span>
-            <Pencil size={12} className="text-zinc-500" />
-          </div>
+          <span className="text-zinc-400 text-[13px] font-medium mb-2 block">User Message</span>
           <div className="relative">
             <textarea
               value={promptValue}
               onChange={handlePromptChange}
               disabled={isPromptConnected}
-              className={`w-full bg-[#121212] ${isPromptConnected ? 'text-zinc-500 cursor-not-allowed' : 'text-zinc-200'} text-[14px] rounded-xl p-3 min-h-[120px] outline-none border border-transparent focus:border-[#10b981] transition-colors resize-y [&::-webkit-resizer]:hidden`}
-              placeholder={isPromptConnected ? "Value provided by connected node..." : "A beautiful sunset over a calm ocean"}
+              className={`w-full bg-[#121212] ${isPromptConnected ? 'text-zinc-500 cursor-not-allowed' : 'text-zinc-200'} text-[14px] rounded-xl p-3 min-h-[100px] outline-none border border-transparent focus:border-[#10b981] transition-colors resize-y [&::-webkit-resizer]:hidden`}
+              placeholder={isPromptConnected ? "Value provided by connected node..." : "Describe a sunset over the ocean..."}
               spellCheck={false}
             />
-            
             <div className="absolute bottom-2 right-2 pointer-events-none">
               <svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M4.5 4.5L5.5 5.5" stroke="#52525B" strokeWidth="1.5" strokeLinecap="round" />
@@ -102,79 +143,64 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
           </div>
         </div>
 
-        <div className="px-4 py-2 relative mt-2">
-          
+        <div className="px-4 py-2 relative">
           <Handle
             type="target"
-            id="settings"
+            id="system"
             position={Position.Left}
-            className="w-4 h-4 bg-zinc-500 border-4 border-[#1c1c1c] rounded-full left-[-8px] top-1/2 transform-none z-10"
+            className="w-4 h-4 bg-[#ec4899] border-4 border-[#1c1c1c] rounded-full left-[-8px] top-[24px] transform-none z-10"
             style={{ transform: "translateY(-50%)" }}
           />
-          <button 
-            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-            className="flex items-center gap-1.5 text-zinc-400 hover:text-zinc-300 transition-colors w-full"
-          >
-            {isSettingsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            <span className="text-[13px] font-medium">Settings</span>
-          </button>
-        </div>
-
-        {isSettingsOpen && (
-          <div className="mt-1 flex flex-col gap-1">
-            
-            <div className="px-4 py-2 flex items-center justify-between relative">
-              <Handle
-                type="target"
-                id="image"
-                position={Position.Left}
-                className="w-4 h-4 bg-[#3b82f6] border-4 border-[#1c1c1c] rounded-full left-[-8px] top-1/2 transform-none z-10"
-                style={{ transform: "translateY(-50%)" }}
-              />
-              <span className="text-zinc-400 text-[13px] font-medium">Image</span>
-              <button className="bg-[#121212] text-zinc-400 text-[12px] px-3 py-1.5 rounded-lg border border-[#262626] hover:bg-[#1a1a1a] transition-colors flex items-center gap-2">
-                Add file
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-              </button>
-            </div>
-
-            <div className="px-4 py-2 relative flex flex-col gap-2">
-              <Handle
-                type="target"
-                id="system"
-                position={Position.Left}
-                className="w-4 h-4 bg-[#ec4899] border-4 border-[#1c1c1c] rounded-full left-[-8px] top-[18px] transform-none z-10"
-                style={{ transform: "translateY(-50%)" }}
-              />
-              <button 
-                onClick={() => setIsSystemPromptOpen(!isSystemPromptOpen)}
-                className="flex items-center gap-1.5 text-zinc-400 hover:text-zinc-300 transition-colors w-full"
-              >
-                {isSystemPromptOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                <span className="text-[13px] font-medium">System Prompt</span>
-              </button>
-
-              {isSystemPromptOpen && (
-                <div className="relative mt-1">
-                  <textarea
-                    value={systemValue}
-                    onChange={handleSystemPromptChange}
-                    disabled={isSystemConnected}
-                    className={`w-full bg-[#121212] ${isSystemConnected ? 'text-zinc-500 cursor-not-allowed' : 'text-zinc-200'} text-[14px] rounded-xl p-3 min-h-[80px] outline-none border border-transparent focus:border-[#ec4899] transition-colors resize-y [&::-webkit-resizer]:hidden`}
-                    placeholder={isSystemConnected ? "Value provided by connected node..." : "Enter system instructions..."}
-                    spellCheck={false}
-                  />
-                  
-                  <div className="absolute bottom-2 right-2 pointer-events-none">
-                    <svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M4.5 4.5L5.5 5.5" stroke="#52525B" strokeWidth="1.5" strokeLinecap="round" />
-                      <path d="M1.5 4.5L5.5 0.5" stroke="#52525B" strokeWidth="1.5" strokeLinecap="round" />
-                    </svg>
-                  </div>
-                </div>
-              )}
+          <span className="text-zinc-400 text-[13px] font-medium mb-2 block">System Prompt <span className="text-zinc-600 text-[11px]">(optional)</span></span>
+          <div className="relative">
+            <textarea
+              value={systemValue}
+              onChange={handleSystemPromptChange}
+              disabled={isSystemConnected}
+              className={`w-full bg-[#121212] ${isSystemConnected ? 'text-zinc-500 cursor-not-allowed' : 'text-zinc-200'} text-[14px] rounded-xl p-3 min-h-[60px] outline-none border border-transparent focus:border-[#ec4899] transition-colors resize-y [&::-webkit-resizer]:hidden`}
+              placeholder={isSystemConnected ? "Value provided by connected node..." : "You are a helpful assistant..."}
+              spellCheck={false}
+            />
+            <div className="absolute bottom-2 right-2 pointer-events-none">
+              <svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4.5 4.5L5.5 5.5" stroke="#52525B" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M1.5 4.5L5.5 0.5" stroke="#52525B" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
             </div>
           </div>
+        </div>
+
+        <div className="px-4 py-2 relative flex items-center justify-between">
+          <Handle
+            type="target"
+            id="image"
+            position={Position.Left}
+            className="w-4 h-4 bg-[#3b82f6] border-4 border-[#1c1c1c] rounded-full left-[-8px] top-1/2 transform-none z-10"
+            style={{ transform: "translateY(-50%)" }}
+          />
+          <div className="flex items-center gap-2">
+            <ImageIcon size={14} className="text-[#3b82f6]" />
+            <span className="text-zinc-400 text-[13px] font-medium">Images</span>
+          </div>
+          {isImageConnected ? (
+            <span className="text-[#3b82f6] text-[12px] font-medium truncate max-w-[120px]">{(imageValue as string) || "Connected"}</span>
+          ) : (
+            <span className="text-zinc-600 text-[12px]">Not connected</span>
+          )}
+        </div>
+
+        {data.output && (
+          <div 
+            className="mx-4 mt-2 bg-[#101010] border border-[#262626] rounded-xl p-3 cursor-pointer hover:border-[#3a3a3a] transition-colors"
+            onClick={() => setShowModal(true)}
+          >
+            <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Output <span className="text-zinc-600 font-normal">(click to expand)</span></div>
+            <div className="text-zinc-300 text-[13px] line-clamp-3">{data.output}</div>
+          </div>
+        )}
+
+        {showModal && (
+          <OutputModal output={data.output} onClose={() => setShowModal(false)} title="LLM Output" />
         )}
 
       </div>

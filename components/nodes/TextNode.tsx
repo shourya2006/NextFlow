@@ -1,9 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Handle, Position, useReactFlow, useEdges, useNodes } from "@xyflow/react";
 import { Type, Pencil, Copy } from "lucide-react";
 import RunWorkflowButton from "./RunWorkflowButton";
+import OutputModal from "./OutputModal";
 
 export default function TextNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
+  const [showModal, setShowModal] = useState(false);
   const { setNodes } = useReactFlow();
   const edges = useEdges();
   const nodes = useNodes();
@@ -91,10 +93,17 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
           </div>
           
           {data.output && (
-            <div className="mt-3 bg-[#101010] border border-[#262626] rounded-xl p-3">
-              <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Output</div>
-              <div className="text-zinc-300 text-[13px] truncate" title={data.output}>{data.output}</div>
+            <div 
+              className="mt-3 bg-[#101010] border border-[#262626] rounded-xl p-3 cursor-pointer hover:border-[#3a3a3a] transition-colors"
+              onClick={() => setShowModal(true)}
+            >
+              <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Output <span className="text-zinc-600 font-normal">(click to expand)</span></div>
+              <div className="text-zinc-300 text-[13px] line-clamp-3">{data.output}</div>
             </div>
+          )}
+
+          {showModal && (
+            <OutputModal output={data.output} onClose={() => setShowModal(false)} title="Text Output" />
           )}
         </div>
       </div>

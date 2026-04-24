@@ -1,11 +1,13 @@
 import { Handle, Position, useReactFlow } from "@xyflow/react";
 import { Video, Upload, FileVideo } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import RunWorkflowButton from "./RunWorkflowButton";
+import OutputModal from "./OutputModal";
 
 export default function UploadVideoNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
   const { setNodes } = useReactFlow();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showModal, setShowModal] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -76,17 +78,17 @@ export default function UploadVideoNode({ id, data, selected }: { id: string, da
         </div>
 
         {data.output && (
-          <div className="p-3 bg-[#161616]">
-            <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Output URL</div>
-            <a 
-              href={data.output} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-[#a855f7] hover:underline text-[12px] break-all block"
-            >
-              {data.output}
-            </a>
+          <div 
+            className="p-3 bg-[#161616] cursor-pointer hover:bg-[#1a1a1a] transition-colors"
+            onClick={() => setShowModal(true)}
+          >
+            <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Output URL <span className="text-zinc-600 font-normal">(click to expand)</span></div>
+            <div className="text-[#a855f7] text-[12px] truncate">{data.output}</div>
           </div>
+        )}
+
+        {showModal && (
+          <OutputModal output={data.output} onClose={() => setShowModal(false)} title="Video URL" />
         )}
       </div>
     </div>

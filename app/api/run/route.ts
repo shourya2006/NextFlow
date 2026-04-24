@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ 
       success: run.status === "COMPLETED", 
       message: "Graph Data Received and Task Completed",
-      result: run.payload
+      result: run.output
     });
   } catch (error) {
     console.error("Error:", error);

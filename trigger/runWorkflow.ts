@@ -1,4 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const runWorkflow = task({
   id: "workflow-run",
@@ -55,14 +56,92 @@ export const runWorkflow = task({
     
     logger.info("Graph sorted. Beginning execution...", { executionOrder });
 
-    // Execute nodes sequentially
     for (const node of orderedNodes) {
       if (node.type === "image" || node.type === "video") {
         continue;
       }
+
+      if (node.type === "text") {
+        if (!node.data.output) {
+          node.data.output = node.data.text || "";
+        }
+        continue;
+      }
+
+      if (node.type === "llm") {
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+          logger.error("Missing GEMINI_API_KEY");
+          node.data.output = "Error: Missing GEMINI_API_KEY";
+          continue;
+        }
+
+        const incomingEdges = edges.filter((e: any) => e.target === node.id);
+        
+        let promptText = node.data.prompt || "";
+        let systemText = node.data.systemPrompt || "";
+        let imageUrl = "";
+
+        for (const edge of incomingEdges) {
+          const sourceNode = orderedNodes.find((n: any) => n.id === edge.source);
+          if (!sourceNode) continue;
+
+          const sourceOutput = sourceNode.data.output || sourceNode.data.text || "";
+
+          if (edge.targetHandle === "prompt") {
+            promptText = sourceOutput;
+          } else if (edge.targetHandle === "system") {
+            systemText = sourceOutput;
+          } else if (edge.targetHandle === "image") {
+            imageUrl = sourceOutput;
+          }
+        }
+
+        if (!promptText) {
+          node.data.output = "Error: No user message provided";
+          continue;
+        }
+
+        try {
+          const modelId = node.data.model || "gemini-2.0-flash";
+          const genAI = new GoogleGenerativeAI(apiKey);
+          const model = genAI.getGenerativeModel({ 
+            model: modelId,
+            ...(systemText ? { systemInstruction: systemText } : {})
+          });
+
+          const parts: any[] = [{ text: promptText }];
+
+          if (imageUrl) {
+            try {
+              const imgRes = await fetch(imageUrl);
+              const imgBuffer = await imgRes.arrayBuffer();
+              const base64 = Buffer.from(imgBuffer).toString("base64");
+              const contentType = imgRes.headers.get("content-type") || "image/png";
+              parts.push({
+                inlineData: {
+                  mimeType: contentType,
+                  data: base64
+                }
+              });
+            } catch (imgErr) {
+              logger.warn("Failed to fetch image for LLM", { imageUrl, error: imgErr });
+            }
+          }
+
+          const result = await model.generateContent(parts);
+          const response = result.response;
+          node.data.output = response.text();
+          
+          logger.info(`LLM Node ${node.id} completed`, { model: modelId });
+        } catch (error: any) {
+          logger.error(`LLM Node ${node.id} failed`, { error: error.message });
+          node.data.output = `Error: ${error.message}`;
+        }
+      }
     }
     
-    logger.info("✅ Workflow Execution Complete");
+    logger.info("Workflow Execution Complete");
     
     return { success: true, executionOrder: orderedNodes };
   },

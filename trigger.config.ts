@@ -1,4 +1,7 @@
 import { defineConfig } from "@trigger.dev/sdk/v3";
+import { config } from "dotenv";
+
+config({ path: ".env.local" });
 
 export default defineConfig({
   project: "proj_hnyincfsrunoluraiuuk",
