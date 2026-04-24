@@ -183,15 +183,61 @@ export default function RunWorkflowButton({
         
         if (result.success && result.result?.executionOrder) {
           const executedNodes = result.result.executionOrder;
-          setNodes((nds) => 
-            nds.map(node => {
-              const executed = executedNodes.find((en: any) => en.id === node.id);
-              if (executed) {
-                return { ...node, data: executed.data };
-              }
-              return node;
-            })
-          );
+          let updatedNodes = getNodes().map(node => {
+            const executed = executedNodes.find((en: any) => en.id === node.id);
+            if (executed) {
+              return { ...node, data: executed.data };
+            }
+            return node;
+          });
+          setNodes(updatedNodes);
+
+          for (let i = 0; i < updatedNodes.length; i++) {
+            const n = updatedNodes[i];
+            if (n.type === "image" && n.data.output && (n.data.output as string).startsWith("data:")) {
+              if (!transloaditKey) continue;
+              try {
+                const dataUrl = n.data.output as string;
+                const res = await fetch(dataUrl);
+                const blob = await res.blob();
+
+                const formData = new FormData();
+                formData.append("params", JSON.stringify({
+                  auth: { key: transloaditKey },
+                  steps: { resize: { robot: "/image/resize" } }
+                }));
+                formData.append("file", blob, `image_${n.id}.png`);
+
+                const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
+                  method: "POST",
+                  body: formData
+                });
+
+                let uploadResult = await uploadRes.json();
+                if (uploadResult.ok === "ASSEMBLY_EXECUTING" && uploadResult.assembly_ssl_url) {
+                  let attempts = 0;
+                  while (uploadResult.ok === "ASSEMBLY_EXECUTING" && attempts < 20) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    const pollRes = await fetch(uploadResult.assembly_ssl_url);
+                    uploadResult = await pollRes.json();
+                    attempts++;
+                  }
+                }
+
+                let sslUrl = uploadResult?.results?.resize?.[0]?.ssl_url;
+                if (!sslUrl) sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
+                if (!sslUrl) {
+                  const keys = Object.keys(uploadResult?.results || {});
+                  if (keys.length > 0) sslUrl = uploadResult.results[keys[0]]?.[0]?.ssl_url;
+                }
+
+                if (sslUrl) {
+                  updatedNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
+                  setNodes([...updatedNodes]);
+                }
+              } catch (e) {}
+            }
+          }
         }
 
       } catch (error) {

@@ -1,5 +1,10 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import ffmpegLib from "fluent-ffmpeg";
+import sharp from "sharp";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 export const runWorkflow = task({
   id: "workflow-run",
@@ -57,13 +62,133 @@ export const runWorkflow = task({
     logger.info("Graph sorted. Beginning execution...", { executionOrder });
 
     for (const node of orderedNodes) {
-      if (node.type === "image" || node.type === "video") {
+      if (node.type === "video") {
+        continue;
+      }
+
+      if (node.type === "image") {
+        const incomingEdges = edges.filter((e: any) => e.target === node.id);
+        if (incomingEdges.length > 0) {
+          for (const edge of incomingEdges) {
+            const sourceNode = orderedNodes.find((n: any) => n.id === edge.source);
+            if (sourceNode && sourceNode.data.output) {
+              node.data.output = sourceNode.data.output;
+            }
+          }
+        }
         continue;
       }
 
       if (node.type === "text") {
         if (!node.data.output) {
           node.data.output = node.data.text || "";
+        }
+        continue;
+      }
+
+      if (node.type === "crop") {
+        const incomingEdges = edges.filter((e: any) => e.target === node.id);
+        let imageUrl = "";
+
+        for (const edge of incomingEdges) {
+          const sourceNode = orderedNodes.find((n: any) => n.id === edge.source);
+          if (sourceNode) {
+            imageUrl = sourceNode.data.output || sourceNode.data.file || "";
+          }
+        }
+
+        if (!imageUrl) {
+          node.data.output = "Error: No image input connected";
+          continue;
+        }
+
+        try {
+          const imgRes = await fetch(imageUrl);
+          const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+          const metadata = await sharp(imgBuffer).metadata();
+
+          const imgWidth = metadata.width || 100;
+          const imgHeight = metadata.height || 100;
+
+          const cropX = Math.round(((node.data.x || 0) / 100) * imgWidth);
+          const cropY = Math.round(((node.data.y || 0) / 100) * imgHeight);
+          const cropW = Math.round(((node.data.w || 100) / 100) * imgWidth);
+          const cropH = Math.round(((node.data.h || 100) / 100) * imgHeight);
+
+          const clampedW = Math.min(cropW, imgWidth - cropX);
+          const clampedH = Math.min(cropH, imgHeight - cropY);
+
+          if (clampedW <= 0 || clampedH <= 0) {
+            node.data.output = "Error: Invalid crop dimensions";
+            continue;
+          }
+
+          const croppedBuffer = await sharp(imgBuffer)
+            .extract({ left: cropX, top: cropY, width: clampedW, height: clampedH })
+            .png()
+            .toBuffer();
+
+          const base64 = croppedBuffer.toString("base64");
+          node.data.output = `data:image/png;base64,${base64}`;
+
+          logger.info(`Crop Node ${node.id} completed`, { cropX, cropY, clampedW, clampedH });
+        } catch (error: any) {
+          logger.error(`Crop Node ${node.id} failed`, { error: error.message });
+          node.data.output = `Error: ${error.message}`;
+        }
+        continue;
+      }
+
+      if (node.type === "frame") {
+        const incomingEdges = edges.filter((e: any) => e.target === node.id);
+        let videoUrl = "";
+
+        for (const edge of incomingEdges) {
+          const sourceNode = orderedNodes.find((n: any) => n.id === edge.source);
+          if (sourceNode && edge.targetHandle === "url") {
+            videoUrl = sourceNode.data.output || sourceNode.data.videoUrl || "";
+          }
+        }
+
+        videoUrl = videoUrl || node.data.videoUrl || "";
+
+        if (!videoUrl) {
+          node.data.output = "Error: No video URL provided";
+          continue;
+        }
+
+        const timestamp = node.data.timestamp || 0;
+
+        try {
+          const tmpDir = os.tmpdir();
+          const inputPath = path.join(tmpDir, `input_${node.id}_${Date.now()}.mp4`);
+          const outputPath = path.join(tmpDir, `frame_${node.id}_${Date.now()}.png`);
+
+          const videoRes = await fetch(videoUrl);
+          const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+          fs.writeFileSync(inputPath, videoBuffer);
+
+          await new Promise<void>((resolve, reject) => {
+            ffmpegLib(inputPath)
+              .seekInput(timestamp)
+              .frames(1)
+              .output(outputPath)
+              .on("end", () => resolve())
+              .on("error", (err: Error) => reject(err))
+              .run();
+          });
+
+          const frameBuffer = fs.readFileSync(outputPath);
+          const base64 = frameBuffer.toString("base64");
+          node.data.output = `data:image/png;base64,${base64}`;
+
+          fs.unlinkSync(inputPath);
+          fs.unlinkSync(outputPath);
+
+          logger.info(`Extract Frame Node ${node.id} completed`, { timestamp });
+        } catch (error: any) {
+          logger.error(`Extract Frame Node ${node.id} failed`, { error: error.message });
+          node.data.output = `Error: ${error.message}`;
         }
         continue;
       }
@@ -103,7 +228,7 @@ export const runWorkflow = task({
         }
 
         try {
-          const modelId = node.data.model || "gemini-2.0-flash";
+          const modelId = node.data.model || "gemini-2.5-flash";
           const genAI = new GoogleGenerativeAI(apiKey);
           const model = genAI.getGenerativeModel({ 
             model: modelId,
@@ -114,10 +239,20 @@ export const runWorkflow = task({
 
           if (imageUrl) {
             try {
-              const imgRes = await fetch(imageUrl);
-              const imgBuffer = await imgRes.arrayBuffer();
-              const base64 = Buffer.from(imgBuffer).toString("base64");
-              const contentType = imgRes.headers.get("content-type") || "image/png";
+              let base64: string;
+              let contentType: string;
+
+              if (imageUrl.startsWith("data:")) {
+                const match = imageUrl.match(/^data:(.*?);base64,(.*)$/);
+                contentType = match?.[1] || "image/png";
+                base64 = match?.[2] || "";
+              } else {
+                const imgRes = await fetch(imageUrl);
+                const imgBuffer = await imgRes.arrayBuffer();
+                base64 = Buffer.from(imgBuffer).toString("base64");
+                contentType = imgRes.headers.get("content-type") || "image/png";
+              }
+
               parts.push({
                 inlineData: {
                   mimeType: contentType,
@@ -125,7 +260,7 @@ export const runWorkflow = task({
                 }
               });
             } catch (imgErr) {
-              logger.warn("Failed to fetch image for LLM", { imageUrl, error: imgErr });
+              logger.warn("Failed to fetch image for LLM", { imageUrl: imageUrl.substring(0, 100), error: imgErr });
             }
           }
 

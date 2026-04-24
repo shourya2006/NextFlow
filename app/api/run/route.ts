@@ -8,10 +8,8 @@ export async function POST(req: Request) {
     console.log("Starting Node:", body.startNodeId);
     console.log("Nodes Count:", body.nodes?.length);
 
-    // Trigger the task
     const handle = await tasks.trigger("workflow-run", body);
     
-    // Poll for completion
     const run = await runs.poll(handle.id);
 
     return NextResponse.json({ 

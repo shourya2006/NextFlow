@@ -16,6 +16,8 @@ export default function OutputModal({
   const [copied, setCopied] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  const isImage = output.startsWith("data:image");
+
   useEffect(() => {
     setMounted(true);
     return () => setMounted(false);
@@ -37,19 +39,21 @@ export default function OutputModal({
     >
       <div 
         className="bg-[#1a1a1a] border border-[#333] rounded-2xl shadow-2xl flex flex-col"
-        style={{ width: "560px", height: "420px" }}
+        style={{ width: isImage ? "auto" : "560px", height: isImage ? "auto" : "420px", maxWidth: "90vw", maxHeight: "80vh" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#2a2a2a] shrink-0">
           <span className="text-[13px] font-bold text-zinc-400 uppercase tracking-wider">{title}</span>
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleCopy}
-              className="flex items-center gap-1.5 text-zinc-500 hover:text-zinc-300 transition-colors text-[12px] bg-[#262626] hover:bg-[#333] px-2.5 py-1.5 rounded-lg"
-            >
-              {copied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
-              {copied ? "Copied!" : "Copy"}
-            </button>
+            {!isImage && (
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1.5 text-zinc-500 hover:text-zinc-300 transition-colors text-[12px] bg-[#262626] hover:bg-[#333] px-2.5 py-1.5 rounded-lg"
+              >
+                {copied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            )}
             <button
               onClick={onClose}
               className="text-zinc-500 hover:text-zinc-300 transition-colors p-1.5 hover:bg-[#262626] rounded-lg"
@@ -60,9 +64,13 @@ export default function OutputModal({
         </div>
 
         <div className="px-5 py-4 overflow-y-auto flex-1">
-          <div className="text-zinc-300 text-[14px] leading-relaxed whitespace-pre-wrap break-words">
-            {output}
-          </div>
+          {isImage ? (
+            <img src={output} alt="Output" className="max-w-full max-h-[60vh] rounded-lg mx-auto" />
+          ) : (
+            <div className="text-zinc-300 text-[14px] leading-relaxed whitespace-pre-wrap break-words">
+              {output}
+            </div>
+          )}
         </div>
       </div>
     </div>,
