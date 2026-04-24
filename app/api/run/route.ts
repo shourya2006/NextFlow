@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { tasks } from "@trigger.dev/sdk/v3";
 
 export async function POST(req: Request) {
   try {
@@ -7,9 +8,12 @@ export async function POST(req: Request) {
     console.log("Starting Node:", body.startNodeId);
     console.log("Graph:", JSON.stringify(body.orderedNodes, null, 2));
 
+    // Trigger the Trigger.dev task
+    await tasks.trigger("workflow-run", body);
+
     return NextResponse.json({ 
       success: true, 
-      message: "Graph Data Recieved",
+      message: "Graph Data Received and Task Triggered",
       receivedNodesCount: body.orderedNodes?.length || 0
     });
   } catch (error) {
