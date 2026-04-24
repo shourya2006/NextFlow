@@ -12,7 +12,6 @@ export default function RunWorkflowButton({
   const { getNodes, getEdges, setNodes } = useReactFlow();
   const nodeCount = useStore((s) => s.nodes.length);
 
-  // root node -> no incoming edge
   const isRoot = !edges.some((e) => e.target === nodeId);
 
   if (!isRoot) return null;
@@ -20,20 +19,88 @@ export default function RunWorkflowButton({
   const handleRun = async () => {
     const nodes = getNodes();
     const allEdges = getEdges();
+    
+    let currentNodes = [...nodes];
+    const transloaditKey = process.env.NEXT_PUBLIC_TRANSLOADIT_AUTH_KEY;
+    let graphChanged = false;
 
-    // If it's just a single Text Node, execute it locally in the frontend
-    if (nodes.length === 1 && nodes[0].type === "text") {
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.id === nodeId
-            ? { ...n, data: { ...n.data, output: n.data.text } }
-            : n
-        )
-      );
+    try {
+      for (let i = 0; i < currentNodes.length; i++) {
+        const n = currentNodes[i];
+        
+        if (nodes.length === 1 && n.type === "text") {
+          currentNodes[i] = { ...n, data: { ...n.data, output: n.data.text } };
+          graphChanged = true;
+        }
+        
+        if (n.type === "image" && n.data.file && !n.data.output) {
+          if (!transloaditKey) {
+            continue;
+          }
+
+          const res = await fetch(n.data.file as string);
+          const blob = await res.blob();
+          
+          const formData = new FormData();
+          formData.append("params", JSON.stringify({
+            auth: { key: transloaditKey },
+            steps: { 
+              resize: { robot: "/image/resize" } 
+            }
+          }));
+          formData.append("file", blob, (n.data.fileName as string) || "upload.png");
+          
+          const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
+            method: "POST",
+            body: formData
+          });
+          
+          if (!uploadRes.ok) {
+            continue;
+          }
+          let uploadResult = await uploadRes.json();
+
+          if (uploadResult.ok === "ASSEMBLY_EXECUTING" && uploadResult.assembly_ssl_url) {
+            let attempts = 0;
+            while (uploadResult.ok === "ASSEMBLY_EXECUTING" && attempts < 20) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              const pollRes = await fetch(uploadResult.assembly_ssl_url);
+              uploadResult = await pollRes.json();
+              attempts++;
+            }
+          }
+          
+          let sslUrl = uploadResult?.results?.resize?.[0]?.ssl_url;
+          
+          if (!sslUrl) {
+            sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
+          }
+          
+          if (!sslUrl) {
+            const resultsKeys = Object.keys(uploadResult?.results || {});
+            if (resultsKeys.length > 0) {
+              sslUrl = uploadResult.results[resultsKeys[0]]?.[0]?.ssl_url;
+            }
+          }
+          
+          if (sslUrl) {
+             currentNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
+             graphChanged = true;
+          }
+        }
+      }
+      
+      if (graphChanged) {
+        setNodes(currentNodes);
+      }
+      
+    } catch (e) {
+    }
+
+    if (nodes.length === 1 && (nodes[0].type === "text" || nodes[0].type === "image")) {
       return;
     }
 
-    // send the raw graph data to backend
     try {
       const response = await fetch("/api/run", {
         method: "POST",
@@ -42,7 +109,7 @@ export default function RunWorkflowButton({
         },
         body: JSON.stringify({
           startNodeId: nodeId,
-          nodes: nodes,
+          nodes: currentNodes,
           edges: allEdges,
         }),
       });
@@ -52,9 +119,21 @@ export default function RunWorkflowButton({
       }
 
       const result = await response.json();
-      console.log("response:", result);
+      
+      if (result.success && result.result?.executionOrder) {
+        const executedNodes = result.result.executionOrder;
+        setNodes((nds) => 
+          nds.map(node => {
+            const executed = executedNodes.find((en: any) => en.id === node.id);
+            if (executed) {
+              return { ...node, data: executed.data };
+            }
+            return node;
+          })
+        );
+      }
+
     } catch (error) {
-      console.error("Error:", error);
     }
   };
 

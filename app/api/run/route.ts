@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { tasks } from "@trigger.dev/sdk/v3";
+import { tasks, runs } from "@trigger.dev/sdk/v3";
 
 export async function POST(req: Request) {
   try {
@@ -8,13 +8,16 @@ export async function POST(req: Request) {
     console.log("Starting Node:", body.startNodeId);
     console.log("Nodes Count:", body.nodes?.length);
 
-    // Trigger the Trigger.dev task
-    await tasks.trigger("workflow-run", body);
+    // Trigger the task
+    const handle = await tasks.trigger("workflow-run", body);
+    
+    // Poll for completion
+    const run = await runs.poll(handle.id);
 
     return NextResponse.json({ 
-      success: true, 
-      message: "Graph Data Received and Task Triggered",
-      receivedNodesCount: body.nodes?.length || 0
+      success: run.status === "COMPLETED", 
+      message: "Graph Data Received and Task Completed",
+      result: run.payload
     });
   } catch (error) {
     console.error("Error:", error);

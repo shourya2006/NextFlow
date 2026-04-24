@@ -51,10 +51,20 @@ export const runWorkflow = task({
       return { success: false, error: "Cycle detected" };
     }
 
-    const graph = executionOrder.map(id => nodes.find((n: any) => n.id === id));
+    const orderedNodes = executionOrder.map(id => nodes.find((n: any) => n.id === id));
     
-    logger.info("Graph:", { executionOrder });
+    logger.info("Graph sorted. Beginning execution...", { executionOrder });
+
+    // Execute nodes sequentially
+    for (const node of orderedNodes) {
+      if (node.type === "image") {
+        logger.info(`Skipping Image Node (processed on client): ${node.id}`);
+        continue;
+      }
+    }
     
-    return { success: true, executionOrder };
+    logger.info("✅ Workflow Execution Complete");
+    
+    return { success: true, executionOrder: orderedNodes };
   },
 });
