@@ -9,7 +9,7 @@ export default function RunWorkflowButton({
   selected?: boolean;
 }) {
   const edges = useEdges();
-  const { getNodes, getEdges } = useReactFlow();
+  const { getNodes, getEdges, setNodes } = useReactFlow();
   const nodeCount = useStore((s) => s.nodes.length);
 
   // root node -> no incoming edge
@@ -20,6 +20,18 @@ export default function RunWorkflowButton({
   const handleRun = async () => {
     const nodes = getNodes();
     const allEdges = getEdges();
+
+    // If it's just a single Text Node, execute it locally in the frontend
+    if (nodes.length === 1 && nodes[0].type === "text") {
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === nodeId
+            ? { ...n, data: { ...n.data, output: n.data.text } }
+            : n
+        )
+      );
+      return;
+    }
 
     // send the raw graph data to backend
     try {

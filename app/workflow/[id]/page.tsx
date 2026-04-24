@@ -107,6 +107,51 @@ export default function WorkflowEditor({
     [setEdges],
   );
 
+  const isValidConnection = useCallback(
+    (connection: Connection | Edge) => {
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      
+      if (sourceNode?.type === "text") {
+        const allowedTextTargets = ["prompt", "system", "text"];
+        if (!allowedTextTargets.includes(connection.targetHandle || "")) {
+          return false;
+        }
+      }
+      
+      // Prevent cyclic connections
+      const target = connection.target;
+      const source = connection.source;
+
+      if (source === target) return false;
+      
+      const hasCycle = (startNode: string, targetNode: string) => {
+        const queue = [startNode];
+        const visited = new Set<string>();
+
+        while (queue.length > 0) {
+          const current = queue.shift()!;
+          if (current === targetNode) return true;
+          
+          if (!visited.has(current)) {
+            visited.add(current);
+            const outgoingEdges = edges.filter(e => e.source === current);
+            for (const edge of outgoingEdges) {
+              queue.push(edge.target);
+            }
+          }
+        }
+        return false;
+      };
+
+      if (hasCycle(target, source)) {
+        return false; // Connection would create a cycle
+      }
+      
+      return true;
+    },
+    [nodes, edges]
+  );
+
   return (
     <div className="flex w-screen h-screen bg-[#0a0a0a] text-zinc-100 overflow-hidden font-sans">
       <Sidebar
@@ -191,6 +236,7 @@ export default function WorkflowEditor({
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            isValidConnection={isValidConnection}
             nodeTypes={nodeTypes}
             fitView
             className="dark"

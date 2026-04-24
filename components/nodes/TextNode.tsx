@@ -1,11 +1,30 @@
-import { Handle, Position, useReactFlow } from "@xyflow/react";
+import { useEffect } from "react";
+import { Handle, Position, useReactFlow, useEdges, useNodes } from "@xyflow/react";
 import { Type, Pencil, Copy } from "lucide-react";
 import RunWorkflowButton from "./RunWorkflowButton";
 
 export default function TextNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
   const { setNodes } = useReactFlow();
+  const edges = useEdges();
+  const nodes = useNodes();
+
+  const textEdge = edges.find(e => e.target === id && e.targetHandle === "text");
+  const textSourceNode = textEdge ? nodes.find(n => n.id === textEdge.source) : null;
+  const isConnected = !!textEdge;
+  const displayValue = isConnected && textSourceNode 
+    ? (textSourceNode.data.output || textSourceNode.data.text || "") 
+    : (data.text || "");
+
+  useEffect(() => {
+    if (isConnected && data.output !== displayValue) {
+      setNodes((nds) => 
+        nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, output: displayValue, text: displayValue } } : n))
+      );
+    }
+  }, [isConnected, displayValue, data.output, id, setNodes]);
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (isConnected) return;
     setNodes((nds) => 
       nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, text: e.target.value } } : n))
     );
@@ -28,6 +47,7 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
           
           <Handle
             type="target"
+            id="text"
             position={Position.Left}
             className="w-4 h-4 bg-[#eab308] border-4 border-[#1c1c1c] rounded-full left-[-8px] top-[24px] transform-none"
             style={{ transform: "translateY(-50%)" }}
@@ -38,6 +58,7 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
           
           <Handle
             type="source"
+            id="text"
             position={Position.Right}
             className="w-4 h-4 bg-[#eab308] border-4 border-[#1c1c1c] rounded-full right-[-8px] top-[24px] transform-none"
             style={{ transform: "translateY(-50%)" }}
@@ -53,10 +74,11 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
         <div className="px-3 pb-3">
           <div className="relative">
             <textarea
-              value={data.text || ""}
+              value={displayValue}
               onChange={handleTextChange}
-              className="w-full bg-[#121212] text-zinc-200 text-[14px] rounded-xl p-3 min-h-[100px] outline-none border border-transparent focus:border-[#eab308] transition-colors resize-y [&::-webkit-resizer]:hidden"
-              placeholder="Write something"
+              disabled={isConnected}
+              className={`w-full bg-[#121212] ${isConnected ? 'text-zinc-500 cursor-not-allowed' : 'text-zinc-200'} text-[14px] rounded-xl p-3 min-h-[100px] outline-none border border-transparent focus:border-[#eab308] transition-colors resize-y [&::-webkit-resizer]:hidden`}
+              placeholder={isConnected ? "Value provided by connected node..." : "Write something"}
               spellCheck={false}
             />
             
@@ -67,6 +89,13 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
               </svg>
             </div>
           </div>
+          
+          {data.output && (
+            <div className="mt-3 bg-[#101010] border border-[#262626] rounded-xl p-3">
+              <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Output</div>
+              <div className="text-zinc-300 text-[13px] whitespace-pre-wrap">{data.output}</div>
+            </div>
+          )}
         </div>
       </div>
     </div>

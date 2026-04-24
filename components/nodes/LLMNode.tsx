@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Handle, Position, useReactFlow } from "@xyflow/react";
+import { Handle, Position, useReactFlow, useEdges, useNodes } from "@xyflow/react";
 import { BrainCircuit, ChevronDown, ChevronRight, Pencil } from "lucide-react";
 import RunWorkflowButton from "./RunWorkflowButton";
 
@@ -9,14 +9,34 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false);
   const { setNodes } = useReactFlow();
+  const edges = useEdges();
+  const nodes = useNodes();
+
+  // Handle prompt connection
+  const promptEdge = edges.find(e => e.target === id && e.targetHandle === "prompt");
+  const promptSourceNode = promptEdge ? nodes.find(n => n.id === promptEdge.source) : null;
+  const isPromptConnected = !!promptEdge;
+  const promptValue = isPromptConnected && promptSourceNode 
+    ? (promptSourceNode.data.output || promptSourceNode.data.text || "")
+    : (data.prompt || "");
+
+  // Handle system prompt connection
+  const systemEdge = edges.find(e => e.target === id && e.targetHandle === "system");
+  const systemSourceNode = systemEdge ? nodes.find(n => n.id === systemEdge.source) : null;
+  const isSystemConnected = !!systemEdge;
+  const systemValue = isSystemConnected && systemSourceNode
+    ? (systemSourceNode.data.output || systemSourceNode.data.text || "")
+    : (data.systemPrompt || "");
 
   const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (isPromptConnected) return;
     setNodes((nds) => 
       nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, prompt: e.target.value } } : n))
     );
   };
 
   const handleSystemPromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (isSystemConnected) return;
     setNodes((nds) => 
       nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, systemPrompt: e.target.value } } : n))
     );
@@ -65,10 +85,11 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
           </div>
           <div className="relative">
             <textarea
-              value={data.prompt || ""}
+              value={promptValue}
               onChange={handlePromptChange}
-              className="w-full bg-[#121212] text-zinc-200 text-[14px] rounded-xl p-3 min-h-[120px] outline-none border border-transparent focus:border-[#10b981] transition-colors resize-y [&::-webkit-resizer]:hidden"
-              placeholder="A beautiful sunset over a calm ocean"
+              disabled={isPromptConnected}
+              className={`w-full bg-[#121212] ${isPromptConnected ? 'text-zinc-500 cursor-not-allowed' : 'text-zinc-200'} text-[14px] rounded-xl p-3 min-h-[120px] outline-none border border-transparent focus:border-[#10b981] transition-colors resize-y [&::-webkit-resizer]:hidden`}
+              placeholder={isPromptConnected ? "Value provided by connected node..." : "A beautiful sunset over a calm ocean"}
               spellCheck={false}
             />
             
@@ -136,10 +157,11 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
               {isSystemPromptOpen && (
                 <div className="relative mt-1">
                   <textarea
-                    value={data.systemPrompt || ""}
+                    value={systemValue}
                     onChange={handleSystemPromptChange}
-                    className="w-full bg-[#121212] text-zinc-200 text-[14px] rounded-xl p-3 min-h-[80px] outline-none border border-transparent focus:border-[#ec4899] transition-colors resize-y [&::-webkit-resizer]:hidden"
-                    placeholder="Enter system instructions..."
+                    disabled={isSystemConnected}
+                    className={`w-full bg-[#121212] ${isSystemConnected ? 'text-zinc-500 cursor-not-allowed' : 'text-zinc-200'} text-[14px] rounded-xl p-3 min-h-[80px] outline-none border border-transparent focus:border-[#ec4899] transition-colors resize-y [&::-webkit-resizer]:hidden`}
+                    placeholder={isSystemConnected ? "Value provided by connected node..." : "Enter system instructions..."}
                     spellCheck={false}
                   />
                   
