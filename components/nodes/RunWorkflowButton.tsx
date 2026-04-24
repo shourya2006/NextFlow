@@ -11,7 +11,7 @@ export default function RunWorkflowButton({ nodeId, selected }: { nodeId: string
   
   if (!isRoot) return null;
 
-  const handleRun = () => {
+  const handleRun = async () => {
     const nodes = getNodes();
     const allEdges = getEdges();
     
@@ -63,6 +63,29 @@ export default function RunWorkflowButton({ nodeId, selected }: { nodeId: string
 
     const orderedNodes = executionOrder.map(id => nodes.find(n => n.id === id));
     console.log("Execution Order:", orderedNodes);
+
+    // Send the data to our backend endpoint
+    try {
+      const response = await fetch('/api/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          startNodeId: nodeId,
+          orderedNodes: orderedNodes
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to run workflow');
+      }
+
+      const result = await response.json();
+      console.log("response:", result);
+    } catch (error) {
+      console.error("Error:", error);
+    }
   };
 
   return (
