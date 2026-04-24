@@ -57,8 +57,7 @@ export const runWorkflow = task({
 
     // Execute nodes sequentially
     for (const node of orderedNodes) {
-      if (node.type === "image") {
-        logger.info(`Skipping Image Node (processed on client): ${node.id}`);
+      if (node.type === "image" || node.type === "video") {
         continue;
       }
     }

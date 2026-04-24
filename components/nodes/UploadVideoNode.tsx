@@ -1,8 +1,26 @@
-import { Handle, Position } from "@xyflow/react";
-import { Video, Upload } from "lucide-react";
+import { Handle, Position, useReactFlow } from "@xyflow/react";
+import { Video, Upload, FileVideo } from "lucide-react";
+import { useRef } from "react";
 import RunWorkflowButton from "./RunWorkflowButton";
 
 export default function UploadVideoNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
+  const { setNodes } = useReactFlow();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        setNodes((nds) => 
+          nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, file: base64String, fileName: file.name } } : n))
+        );
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
     <div className="relative font-sans mt-8 group">
       <RunWorkflowButton nodeId={id} selected={selected} />
@@ -14,26 +32,62 @@ export default function UploadVideoNode({ id, data, selected }: { id: string, da
         <span className="text-[14px] font-medium text-zinc-400">Video</span>
       </div>
 
-      <div className={`bg-[#1c1c1c] w-[260px] h-[160px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] flex items-center justify-center transition-all ${selected ? 'ring-2 ring-[#a855f7]' : ''}`}>
+      <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] flex flex-col transition-all ${selected ? 'ring-2 ring-[#a855f7]' : ''}`}>
         
-        <Handle
-          type="target"
-          position={Position.Left}
-          className="w-4 h-4 bg-[#a855f7] border-4 border-[#1c1c1c] rounded-full left-[-8px] top-1/2 transform-none"
-          style={{ transform: "translateY(-50%)" }}
-        />
+        <div className="h-[120px] relative flex items-center justify-center border-b border-[#262626]">
+          <Handle
+            type="target"
+            position={Position.Left}
+            className="w-4 h-4 bg-[#a855f7] border-4 border-[#1c1c1c] rounded-full left-[-8px] top-1/2 transform-none z-10"
+            style={{ transform: "translateY(-50%)" }}
+          />
 
-        <button className="flex flex-col items-center gap-3 text-zinc-500 hover:text-zinc-300 transition-colors">
-          <Upload size={24} strokeWidth={2} />
-          <span className="text-[14px] font-medium">Upload</span>
-        </button>
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileChange} 
+            accept="video/*" 
+            className="hidden" 
+          />
 
-        <Handle
-          type="source"
-          position={Position.Right}
-          className="w-4 h-4 bg-[#a855f7] border-4 border-[#1c1c1c] rounded-full right-[-8px] top-1/2 transform-none"
-          style={{ transform: "translateY(-50%)" }}
-        />
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="flex flex-col items-center gap-2 text-zinc-500 hover:text-zinc-300 transition-colors z-0"
+          >
+            {data.fileName ? (
+              <>
+                <FileVideo size={24} strokeWidth={2} className="text-[#a855f7]" />
+                <span className="text-[13px] font-medium text-zinc-300 max-w-[200px] truncate px-4">{data.fileName}</span>
+              </>
+            ) : (
+              <>
+                <Upload size={24} strokeWidth={2} />
+                <span className="text-[13px] font-medium">Upload Video</span>
+              </>
+            )}
+          </button>
+
+          <Handle
+            type="source"
+            position={Position.Right}
+            className="w-4 h-4 bg-[#a855f7] border-4 border-[#1c1c1c] rounded-full right-[-8px] top-1/2 transform-none z-10"
+            style={{ transform: "translateY(-50%)" }}
+          />
+        </div>
+
+        {data.output && (
+          <div className="p-3 bg-[#161616]">
+            <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Output URL</div>
+            <a 
+              href={data.output} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-[#a855f7] hover:underline text-[12px] break-all block"
+            >
+              {data.output}
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

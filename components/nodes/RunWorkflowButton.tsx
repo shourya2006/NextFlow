@@ -88,6 +88,62 @@ export default function RunWorkflowButton({
              graphChanged = true;
           }
         }
+
+        if (n.type === "video" && n.data.file && !n.data.output) {
+          if (!transloaditKey) {
+            continue
+          }
+
+          const res = await fetch(n.data.file as string);
+          const blob = await res.blob();
+          
+          const formData = new FormData();
+          formData.append("params", JSON.stringify({
+            auth: { key: transloaditKey },
+            steps: { 
+              encode: { robot: "/video/encode", preset: "iphone-high" } 
+            }
+          }));
+          formData.append("file", blob, (n.data.fileName as string) || "upload.mp4");
+          
+          const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
+            method: "POST",
+            body: formData
+          });
+          
+          if (!uploadRes.ok) {
+            continue;
+          }
+          let uploadResult = await uploadRes.json();
+
+          if (uploadResult.ok === "ASSEMBLY_EXECUTING" && uploadResult.assembly_ssl_url) {
+            let attempts = 0;
+            while (uploadResult.ok === "ASSEMBLY_EXECUTING" && attempts < 60) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              const pollRes = await fetch(uploadResult.assembly_ssl_url);
+              uploadResult = await pollRes.json();
+              attempts++;
+            }
+          }
+          
+          let sslUrl = uploadResult?.results?.encode?.[0]?.ssl_url;
+          
+          if (!sslUrl) {
+            sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
+          }
+          
+          if (!sslUrl) {
+            const resultsKeys = Object.keys(uploadResult?.results || {});
+            if (resultsKeys.length > 0) {
+              sslUrl = uploadResult.results[resultsKeys[0]]?.[0]?.ssl_url;
+            }
+          }
+          
+          if (sslUrl) {
+             currentNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
+             graphChanged = true;
+          }
+        }
       }
       
       if (graphChanged) {
@@ -97,7 +153,7 @@ export default function RunWorkflowButton({
     } catch (e) {
     }
 
-    if (nodes.length === 1 && (nodes[0].type === "text" || nodes[0].type === "image")) {
+    if (nodes.length === 1 && (nodes[0].type === "text" || nodes[0].type === "image" || nodes[0].type === "video")) {
       return;
     }
 

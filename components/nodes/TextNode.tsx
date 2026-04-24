@@ -93,7 +93,7 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
           {data.output && (
             <div className="mt-3 bg-[#101010] border border-[#262626] rounded-xl p-3">
               <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Output</div>
-              <div className="text-zinc-300 text-[13px] whitespace-pre-wrap">{data.output}</div>
+              <div className="text-zinc-300 text-[13px] truncate" title={data.output}>{data.output}</div>
             </div>
           )}
         </div>
