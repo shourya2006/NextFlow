@@ -6,7 +6,7 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     console.log("Starting Node:", body.startNodeId);
-    console.log("Graph:", JSON.stringify(body.orderedNodes, null, 2));
+    console.log("Nodes Count:", body.nodes?.length);
 
     // Trigger the Trigger.dev task
     await tasks.trigger("workflow-run", body);
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ 
       success: true, 
       message: "Graph Data Received and Task Triggered",
-      receivedNodesCount: body.orderedNodes?.length || 0
+      receivedNodesCount: body.nodes?.length || 0
     });
   } catch (error) {
     console.error("Error:", error);
