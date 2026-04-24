@@ -33,7 +33,7 @@ export default function RunWorkflowButton({
         for (let i = 0; i < currentNodes.length; i++) {
           const n = currentNodes[i];
           
-          if (nodes.length === 1 && n.type === "text") {
+          if (n.type === "text" && !edges.some(e => e.target === n.id)) {
             currentNodes[i] = { ...n, data: { ...n.data, output: n.data.text } };
             graphChanged = true;
           }
