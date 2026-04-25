@@ -3,6 +3,7 @@ import { Image as ImageIcon, Upload, FileImage } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 import RunWorkflowButton from "./RunWorkflowButton";
 import OutputModal from "./OutputModal";
+import { useRunStore } from "@/store/runStore";
 
 export default function UploadImageNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
   const { setNodes } = useReactFlow();
@@ -10,6 +11,7 @@ export default function UploadImageNode({ id, data, selected }: { id: string, da
   const nodes = useNodes();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showModal, setShowModal] = useState(false);
+  const isRunning = useRunStore((s) => s.isRunning);
 
   const inputEdge = edges.find(e => e.target === id);
   const inputSourceNode = inputEdge ? nodes.find(n => n.id === inputEdge.source) : null;
@@ -49,7 +51,7 @@ export default function UploadImageNode({ id, data, selected }: { id: string, da
         <span className="text-[14px] font-medium text-zinc-400">Image</span>
       </div>
 
-      <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] flex flex-col transition-all ${selected ? 'ring-2 ring-[#3b82f6]' : ''}`}>
+      <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] flex flex-col transition-all ${selected ? 'ring-2 ring-[#3b82f6]' : ''} ${isRunning ? 'node-running' : ''}`}>
         
         <div className="h-[120px] relative flex items-center justify-center border-b border-[#262626]">
           <Handle

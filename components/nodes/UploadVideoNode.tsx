@@ -3,11 +3,13 @@ import { Video, Upload, FileVideo } from "lucide-react";
 import { useRef, useState } from "react";
 import RunWorkflowButton from "./RunWorkflowButton";
 import OutputModal from "./OutputModal";
+import { useRunStore } from "@/store/runStore";
 
 export default function UploadVideoNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
   const { setNodes } = useReactFlow();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showModal, setShowModal] = useState(false);
+  const isRunning = useRunStore((s) => s.isRunning);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -34,7 +36,7 @@ export default function UploadVideoNode({ id, data, selected }: { id: string, da
         <span className="text-[14px] font-medium text-zinc-400">Video</span>
       </div>
 
-      <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] flex flex-col transition-all ${selected ? 'ring-2 ring-[#a855f7]' : ''}`}>
+      <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] flex flex-col transition-all ${selected ? 'ring-2 ring-[#a855f7]' : ''} ${isRunning ? 'node-running' : ''}`}>
         
         <div className="h-[120px] relative flex items-center justify-center border-b border-[#262626]">
           <Handle

@@ -1,6 +1,7 @@
 import { Play, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useReactFlow, useEdges, useStore } from "@xyflow/react";
+import { useRunStore } from "@/store/runStore";
 
 export default function RunWorkflowButton({
   nodeId,
@@ -12,7 +13,13 @@ export default function RunWorkflowButton({
   const edges = useEdges();
   const { getNodes, getEdges, setNodes } = useReactFlow();
   const nodeCount = useStore((s) => s.nodes.length);
-  const [isRunning, setIsRunning] = useState(false);
+  const [isRunning, setIsRunningLocal] = useState(false);
+  const setIsRunning = useRunStore((s) => s.setIsRunning);
+
+  const setRunning = (v: boolean) => {
+    setIsRunningLocal(v);
+    setIsRunning(v);
+  };
 
   const isRoot = !edges.some((e) => e.target === nodeId);
 
@@ -20,7 +27,7 @@ export default function RunWorkflowButton({
 
   const handleRun = async () => {
     if (isRunning) return;
-    setIsRunning(true);
+    setRunning(true);
     try {
       const nodes = getNodes();
       const allEdges = getEdges();
@@ -243,7 +250,7 @@ export default function RunWorkflowButton({
       } catch (error) {
       }
     } finally {
-      setIsRunning(false);
+      setRunning(false);
     }
   };
 

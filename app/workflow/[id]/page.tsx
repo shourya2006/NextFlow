@@ -21,6 +21,7 @@ import LLMNode from "@/components/nodes/LLMNode";
 import CropImageNode from "@/components/nodes/CropImageNode";
 import ExtractFrameNode from "@/components/nodes/ExtractFrameNode";
 import { useSidebarStore } from "@/store/sidebarStore";
+import FlowingEdge from "@/components/nodes/FlowingEdge";
 import {
   Grip,
   Undo2,
@@ -47,6 +48,10 @@ export default function WorkflowEditor({
     llm: LLMNode,
     crop: CropImageNode,
     frame: ExtractFrameNode,
+  };
+
+  const edgeTypes = {
+    default: FlowingEdge,
   };
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -386,6 +391,7 @@ export default function WorkflowEditor({
             onConnect={onConnect}
             isValidConnection={isValidConnection}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             fitView
             className="dark"
             proOptions={{ hideAttribution: true }}

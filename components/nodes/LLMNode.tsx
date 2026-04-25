@@ -5,6 +5,7 @@ import { Handle, Position, useReactFlow, useEdges, useNodes } from "@xyflow/reac
 import { BrainCircuit, ChevronDown, Image as ImageIcon } from "lucide-react";
 import RunWorkflowButton from "./RunWorkflowButton";
 import OutputModal from "./OutputModal";
+import { useRunStore } from "@/store/runStore";
 
 const MODELS = [
   { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
@@ -18,6 +19,7 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
   const { setNodes } = useReactFlow();
   const edges = useEdges();
   const nodes = useNodes();
+  const isRunning = useRunStore((s) => s.isRunning);
 
   const promptEdge = edges.find(e => e.target === id && e.targetHandle === "prompt");
   const promptSourceNode = promptEdge ? nodes.find(n => n.id === promptEdge.source) : null;
@@ -75,7 +77,7 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
         <span className="text-[14px] font-medium text-zinc-400">LLM</span>
       </div>
 
-      <div className={`bg-[#1c1c1c] w-[280px] rounded-2xl shadow-xl overflow-visible border border-[#262626] transition-all pb-4 ${selected ? 'ring-2 ring-[#10b981]' : ''}`}>
+      <div className={`bg-[#1c1c1c] w-[280px] rounded-2xl shadow-xl overflow-visible border border-[#262626] transition-all pb-4 ${selected ? 'ring-2 ring-[#10b981]' : ''} ${isRunning ? 'node-running' : ''}`}>
 
         <Handle
           type="source"

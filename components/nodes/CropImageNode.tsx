@@ -3,12 +3,14 @@ import { Handle, Position, useReactFlow, useEdges, useNodes } from "@xyflow/reac
 import { Crop } from "lucide-react";
 import RunWorkflowButton from "./RunWorkflowButton";
 import OutputModal from "./OutputModal";
+import { useRunStore } from "@/store/runStore";
 
 export default function CropImageNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
   const { setNodes } = useReactFlow();
   const edges = useEdges();
   const nodes = useNodes();
   const [showModal, setShowModal] = useState(false);
+  const isRunning = useRunStore((s) => s.isRunning);
 
   const imageEdge = edges.find(e => e.target === id);
   const imageSourceNode = imageEdge ? nodes.find(n => n.id === imageEdge.source) : null;
@@ -33,7 +35,7 @@ export default function CropImageNode({ id, data, selected }: { id: string, data
         <span className="text-[14px] font-medium text-zinc-400">Crop Image</span>
       </div>
 
-      <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] flex flex-col transition-all ${selected ? 'ring-2 ring-[#14b8a6]' : ''}`}>
+      <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] flex flex-col transition-all ${selected ? 'ring-2 ring-[#14b8a6]' : ''} ${isRunning ? 'node-running' : ''}`}>
 
         <div className="px-4 py-3 relative flex items-center justify-between border-b border-[#262626]">
           <Handle

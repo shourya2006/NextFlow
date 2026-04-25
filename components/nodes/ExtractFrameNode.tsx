@@ -3,12 +3,14 @@ import { Handle, Position, useReactFlow, useEdges, useNodes } from "@xyflow/reac
 import { Frame } from "lucide-react";
 import RunWorkflowButton from "./RunWorkflowButton";
 import OutputModal from "./OutputModal";
+import { useRunStore } from "@/store/runStore";
 
 export default function ExtractFrameNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
   const { setNodes } = useReactFlow();
   const edges = useEdges();
   const nodes = useNodes();
   const [showModal, setShowModal] = useState(false);
+  const isRunning = useRunStore((s) => s.isRunning);
 
   const urlEdge = edges.find(e => e.target === id && e.targetHandle === "url");
   const urlSourceNode = urlEdge ? nodes.find(n => n.id === urlEdge.source) : null;
@@ -40,7 +42,7 @@ export default function ExtractFrameNode({ id, data, selected }: { id: string, d
         <span className="text-[14px] font-medium text-zinc-400">Extract Frame</span>
       </div>
 
-      <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] flex flex-col transition-all ${selected ? 'ring-2 ring-[#6366f1]' : ''}`}>
+      <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] flex flex-col transition-all ${selected ? 'ring-2 ring-[#6366f1]' : ''} ${isRunning ? 'node-running' : ''}`}>
 
         <div className="px-4 py-2 flex justify-end items-center relative bg-[#181818] border-b border-[#262626]">
           <span className="text-zinc-400 text-[13px] font-medium mr-1">Image Output</span>

@@ -3,12 +3,14 @@ import { Handle, Position, useReactFlow, useEdges, useNodes } from "@xyflow/reac
 import { Type, Pencil, Copy } from "lucide-react";
 import RunWorkflowButton from "./RunWorkflowButton";
 import OutputModal from "./OutputModal";
+import { useRunStore } from "@/store/runStore";
 
 export default function TextNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
   const [showModal, setShowModal] = useState(false);
   const { setNodes } = useReactFlow();
   const edges = useEdges();
   const nodes = useNodes();
+  const isRunning = useRunStore((s) => s.isRunning);
 
   const textEdge = edges.find(e => e.target === id && e.targetHandle === "text");
   const textSourceNode = textEdge ? nodes.find(n => n.id === textEdge.source) : null;
@@ -43,7 +45,7 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
         <span className="text-[14px] font-medium text-zinc-400">Text</span>
       </div>
 
-      <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] transition-all ${selected ? 'ring-2 ring-[#eab308]' : ''}`}>
+      <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] transition-all ${selected ? 'ring-2 ring-[#eab308]' : ''} ${isRunning ? 'node-running' : ''}`}>
         
         <div className="flex items-center justify-between px-4 pt-3 pb-2 relative">
           
