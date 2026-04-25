@@ -1,0 +1,52 @@
+[
+  {
+    "id": "xy-edge__upload-image-1777074068580-crop-image-1777074075742",
+    "source": "upload-image-1777074068580",
+    "target": "crop-image-1777074075742"
+  },
+  {
+    "id": "xy-edge__text-node-1777074166577text-llm-node-1777074139592prompt",
+    "source": "text-node-1777074166577",
+    "target": "llm-node-1777074139592",
+    "sourceHandle": "text",
+    "targetHandle": "prompt"
+  },
+  {
+    "id": "xy-edge__text-node-1777074179446text-llm-node-1777074139592system",
+    "source": "text-node-1777074179446",
+    "target": "llm-node-1777074139592",
+    "sourceHandle": "text",
+    "targetHandle": "system"
+  },
+  {
+    "id": "xy-edge__upload-video-1777074427652-extract-frame-1777074425949url",
+    "source": "upload-video-1777074427652",
+    "target": "extract-frame-1777074425949",
+    "targetHandle": "url"
+  },
+  {
+    "id": "xy-edge__text-node-1777074559189text-llm-node-1777074564069system",
+    "source": "text-node-1777074559189",
+    "target": "llm-node-1777074564069",
+    "sourceHandle": "text",
+    "targetHandle": "system"
+  },
+  {
+    "id": "xy-edge__extract-frame-1777074425949-llm-node-1777074564069image",
+    "source": "extract-frame-1777074425949",
+    "target": "llm-node-1777074564069",
+    "targetHandle": "image"
+  },
+  {
+    "id": "xy-edge__crop-image-1777074075742-llm-node-1777074564069image",
+    "source": "crop-image-1777074075742",
+    "target": "llm-node-1777074564069",
+    "targetHandle": "image"
+  },
+  {
+    "id": "xy-edge__llm-node-1777074139592-llm-node-1777074564069prompt",
+    "source": "llm-node-1777074139592",
+    "target": "llm-node-1777074564069",
+    "targetHandle": "prompt"
+  }
+]

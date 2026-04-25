@@ -6,6 +6,12 @@ export async function GET() {
   try {
     const { userId } = await auth();
 
+    const defaultWorkflow = {
+      id: 'default',
+      title: 'Default Workflow',
+      updatedAt: new Date(0).toISOString(), // Use epoch so it appears at the end or doesn't override real ones, or actually just any date.
+    };
+
     if (!userId) {
       return NextResponse.json([]);
     }
@@ -22,7 +28,7 @@ export async function GET() {
       }
     });
     
-    return NextResponse.json(workflows);
+    return NextResponse.json([defaultWorkflow, ...workflows]);
   } catch (error) {
     console.error("Failed to fetch workflows:", error);
     return NextResponse.json({ error: "Failed to fetch workflows" }, { status: 500 });

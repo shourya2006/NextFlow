@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
+import fs from 'fs/promises';
+import path from 'path';
 
 export async function GET(
   request: Request,
@@ -9,6 +11,26 @@ export async function GET(
   try {
     const { userId } = await auth();
     const { id } = await params;
+
+    if (id === 'default') {
+      try {
+        const nodesData = await fs.readFile(path.join(process.cwd(), 'data', 'nodes.json'), 'utf-8');
+        const edgesData = await fs.readFile(path.join(process.cwd(), 'data', 'edges.json'), 'utf-8');
+        return NextResponse.json({
+          id: 'default',
+          title: 'Default Workflow',
+          nodes: JSON.parse(nodesData),
+          edges: JSON.parse(edgesData),
+          userId: null,
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+        });
+      } catch (err) {
+        console.error("Failed to read default workflow data:", err);
+        return NextResponse.json({ error: "Default workflow not available" }, { status: 404 });
+      }
+    }
+
     const workflow = await prisma.workflow.findUnique({
       where: { id }
     });
@@ -38,6 +60,11 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { id } = await params;
+
+    if (id === 'default') {
+      return NextResponse.json({ error: "Cannot modify default workflow" }, { status: 403 });
+    }
+
     const body = await request.json();
 
     const existing = await prisma.workflow.findUnique({ where: { id } });
@@ -82,6 +109,10 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { id } = await params;
+
+    if (id === 'default') {
+      return NextResponse.json({ error: "Cannot delete default workflow" }, { status: 403 });
+    }
     
     const existing = await prisma.workflow.findUnique({ where: { id } });
     if (!existing) {
