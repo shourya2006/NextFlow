@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 import { Plus, MoreVertical, ExternalLink, Pencil, Trash } from "lucide-react";
 
 type Workflow = {
@@ -12,6 +13,7 @@ type Workflow = {
 
 export default function WorkflowsGrid({ workflows = [], onWorkflowDeleted }: { workflows?: Workflow[], onWorkflowDeleted?: () => void }) {
   const router = useRouter();
+  const { isSignedIn } = useUser();
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -22,6 +24,10 @@ export default function WorkflowsGrid({ workflows = [], onWorkflowDeleted }: { w
   };
 
   const handleCreate = async () => {
+    if (!isSignedIn) {
+      alert("Please sign in to create workflows.");
+      return;
+    }
     try {
       const res = await fetch("/api/workflows", { method: "POST", body: JSON.stringify({ title: "Untitled Workflow" }) });
       if (res.ok) {

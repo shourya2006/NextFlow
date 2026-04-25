@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { auth } from '@clerk/nextjs/server';
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { userId } = await auth();
     const { id } = await params;
     const workflow = await prisma.workflow.findUnique({
       where: { id }
@@ -13,6 +15,10 @@ export async function GET(
     
     if (!workflow) {
       return NextResponse.json({ error: "Workflow not found" }, { status: 404 });
+    }
+
+    if (workflow.userId !== null && workflow.userId !== userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
     
     return NextResponse.json(workflow);
@@ -27,8 +33,17 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const { id } = await params;
     const body = await request.json();
+
+    const existing = await prisma.workflow.findUnique({ where: { id } });
+    if (existing && existing.userId !== null && existing.userId !== userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
     
     const data: any = {};
     if (body.title !== undefined) data.title = body.title;
@@ -37,12 +52,16 @@ export async function PUT(
     
     const workflow = await prisma.workflow.upsert({
       where: { id },
-      update: data,
+      update: {
+        ...data,
+        userId: existing?.userId || userId || null,
+      },
       create: {
         id,
         title: body.title || "Untitled",
         nodes: body.nodes || [],
         edges: body.edges || [],
+        userId: userId || null,
       }
     });
     
@@ -58,7 +77,21 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const { id } = await params;
+    
+    const existing = await prisma.workflow.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    if (existing.userId !== null && existing.userId !== userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
     await prisma.workflow.delete({
       where: { id }
     });

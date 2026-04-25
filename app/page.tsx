@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useUser } from "@clerk/nextjs";
 import Sidebar from "@/components/home/Sidebar";
 import Hero from "@/components/home/Hero";
 import Tabs from "@/components/home/Tabs";
@@ -10,6 +11,7 @@ import EmptyState from "@/components/home/EmptyState";
 type Workflow = { id: string; title: string; updatedAt: string };
 
 export default function Home() {
+  const { isSignedIn, user, isLoaded } = useUser();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,8 +31,10 @@ export default function Home() {
   };
 
   useEffect(() => {
-    fetchWorkflows();
-  }, []);
+    if (isLoaded) {
+      fetchWorkflows();
+    }
+  }, [isLoaded, isSignedIn, user?.id]);
 
   return (
     <div className="flex w-full h-screen bg-[#111111] text-zinc-100 overflow-hidden font-sans">

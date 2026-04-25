@@ -2,9 +2,27 @@
 
 import { ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 
 export default function Hero() {
   const router = useRouter();
+  const { isSignedIn } = useUser();
+
+  const handleCreate = async () => {
+    if (!isSignedIn) {
+      alert("Please sign in to create workflows.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/workflows", { method: "POST", body: JSON.stringify({ title: "Untitled Workflow" }) });
+      if (res.ok) {
+        const wf = await res.json();
+        router.push(`/workflow/${wf.id}`);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   return (
     <div className="relative w-full text-white bg-[#121212] overflow-hidden min-h-[380px] flex items-center">
@@ -46,7 +64,7 @@ export default function Hero() {
         <div className="flex flex-col gap-4 xl:flex-row pb-6">
           <button
             type="button"
-            onClick={() => router.push(`/workflow/${Date.now()}`)}
+            onClick={handleCreate}
             className="inline-flex shrink-0 items-center justify-center gap-2 text-[14px] font-medium transition-all outline-none bg-white text-black hover:bg-zinc-200 h-10 px-8 rounded-full group/btn active:scale-95 w-max"
           >
             New Workflow

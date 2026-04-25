@@ -2,9 +2,27 @@
 
 import { ArrowUpRight } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 
 export default function EmptyState() {
   const router = useRouter();
+  const { isSignedIn } = useUser();
+
+  const handleCreate = async () => {
+    if (!isSignedIn) {
+      alert("Please sign in to create workflows.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/workflows", { method: "POST", body: JSON.stringify({ title: "Untitled Workflow" }) });
+      if (res.ok) {
+        const wf = await res.json();
+        router.push(`/workflow/${wf.id}`);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   return (
     <div className="px-12 w-full pb-12">
@@ -31,8 +49,8 @@ export default function EmptyState() {
             <div className="flex gap-2">
               <button 
                 type="button"
-                onClick={() => router.push(`/workflow/${Date.now()}`)}
-                className="inline-flex shrink-0 items-center justify-center gap-2 text-[14px] font-medium transition-all outline-none bg-white text-black hover:bg-zinc-200 h-10 px-10 rounded-full" 
+                className="inline-flex items-center justify-center gap-2 text-[13px] font-medium transition-all outline-none bg-white text-black hover:bg-zinc-200 h-9 px-6 rounded-md group/btn active:scale-95"
+                onClick={handleCreate}
               >
                 New Workflow
               </button>

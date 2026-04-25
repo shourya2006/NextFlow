@@ -9,6 +9,7 @@ datasource db {
 
 model Workflow {
   id        String   @id @default(cuid())
+  userId    String?  // Clerk user ID
   title     String   @default("Untitled")
   nodes     Json     @default("[]")
   edges     Json     @default("[]")
