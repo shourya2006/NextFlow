@@ -12,48 +12,82 @@ export default function AuthModal({
   onClose: () => void;
 }) {
   const clerk = useClerk();
+  const [mode, setMode] = useState<"signIn" | "signUp">("signIn");
   const [emailAddress, setEmailAddress] = useState("");
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [needsVerification, setNeedsVerification] = useState(false);
   const [isLoadingGoogle, setIsLoadingGoogle] = useState(false);
   const [isLoadingEmail, setIsLoadingEmail] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleGoogleSignIn = () => {
+  const handleGoogleAuth = () => {
     if (!clerk.loaded) return;
     setIsLoadingGoogle(true);
-    clerk.client.signIn.authenticateWithRedirect({
+    
+    const authAction = mode === "signUp" ? clerk.client.signUp : clerk.client.signIn;
+    
+    authAction.authenticateWithRedirect({
       strategy: "oauth_google",
       redirectUrl: "/sso-callback",
       redirectUrlComplete: "/",
     });
   };
 
-  const handleEmailSignIn = async () => {
+  const handleEmailAuth = async () => {
     if (!clerk.loaded || !emailAddress.trim()) return;
     setIsLoadingEmail(true);
     try {
-      const signInAttempt = await clerk.client.signIn.create({
-        identifier: emailAddress,
-      });
-      const factor = signInAttempt.supportedFirstFactors?.find(
-        (f) => f.strategy === "email_link"
-      ) as any;
-      
-      if (!factor) {
-        console.error("Email link not supported for this user");
-        setIsLoadingEmail(false);
-        return;
-      }
+      if (mode === "signUp") {
+        if (!password) return;
+        await clerk.client.signUp.create({
+          emailAddress,
+          password,
+        });
+        await clerk.client.signUp.prepareEmailAddressVerification({
+          strategy: "email_code",
+        });
+        setNeedsVerification(true);
+      } else {
+        // For Sign In, we require password
+        if (!password) {
+          alert("Please enter a password");
+          setIsLoadingEmail(false);
+          return;
+        }
 
-      const { startEmailLinkFlow } = clerk.client.signIn.createEmailLinkFlow();
-      await startEmailLinkFlow({
-        emailAddressId: factor.emailAddressId,
-        redirectUrl: "http://localhost:3000/",
+        const result = await clerk.client.signIn.create({
+          identifier: emailAddress,
+          password,
+        });
+        if (result.status === "complete") {
+          clerk.setActive({ session: result.createdSessionId });
+          onClose();
+        }
+      }
+    } catch (err: any) {
+      console.error("Auth error:", err);
+      alert(err.errors?.[0]?.message || "An error occurred");
+    } finally {
+      setIsLoadingEmail(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    if (!clerk.loaded || !code) return;
+    setIsLoadingEmail(true);
+    try {
+      const result = await clerk.client.signUp.attemptEmailAddressVerification({
+        code,
       });
-      setEmailSent(true);
-    } catch (err) {
-      console.error("Error signing in with email:", err);
+      if (result.status === "complete") {
+        clerk.setActive({ session: result.createdSessionId });
+        onClose();
+      }
+    } catch (err: any) {
+      console.error("Verification error:", err);
+      alert(err.errors?.[0]?.message || "Invalid code");
     } finally {
       setIsLoadingEmail(false);
     }
@@ -75,72 +109,116 @@ export default function AuthModal({
         {/* Left Side: Auth Form */}
         <div className="flex-1 flex flex-col justify-center items-center px-8 relative">
           <h2 className="text-[32px] font-bold text-white mb-10 tracking-tight">
-            Welcome back
+            {needsVerification ? "Check your email" : (mode === "signIn" ? "Welcome back" : "Create an account")}
           </h2>
 
           <div className="w-full max-w-[340px] flex flex-col gap-4">
-            <button 
-              onClick={handleGoogleSignIn}
-              disabled={isLoadingGoogle}
-              className="relative flex items-center justify-center w-full h-[52px] bg-white hover:bg-zinc-100 text-black font-semibold text-[15px] rounded-2xl transition-colors disabled:opacity-50"
-            >
-              <div className="absolute left-5 flex items-center justify-center">
-                {isLoadingGoogle ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <img
-                    src="https://www.svgrepo.com/show/475656/google-color.svg"
-                    alt="Google"
-                    className="w-5 h-5"
+            {needsVerification ? (
+              <>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Enter verification code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    className="w-full h-[52px] bg-[#141414] border border-[#262626] rounded-2xl px-4 text-[15px] text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
                   />
-                )}
-              </div>
-              <span>Continue with Google</span>
-            </button>
+                </div>
+                <button 
+                  onClick={handleVerify}
+                  disabled={isLoadingEmail}
+                  className="flex items-center justify-center w-full h-[52px] bg-[#0f172a] hover:bg-[#1e293b] text-[#3b82f6] font-semibold text-[15px] rounded-2xl transition-colors mt-1 disabled:opacity-50"
+                >
+                  {isLoadingEmail ? <Loader2 className="w-5 h-5 animate-spin" /> : "Verify Code"}
+                </button>
+              </>
+            ) : (
+              <>
+                <button 
+                  onClick={handleGoogleAuth}
+                  disabled={isLoadingGoogle}
+                  className="relative flex items-center justify-center w-full h-[52px] bg-white hover:bg-zinc-100 text-black font-semibold text-[15px] rounded-2xl transition-colors disabled:opacity-50"
+                >
+                  <div className="absolute left-5 flex items-center justify-center">
+                    {isLoadingGoogle ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <img
+                        src="https://www.svgrepo.com/show/475656/google-color.svg"
+                        alt="Google"
+                        className="w-5 h-5"
+                      />
+                    )}
+                  </div>
+                  <span>Continue with Google</span>
+                </button>
 
-            <div className="flex items-center justify-center w-full my-3">
-              <span className="text-[13px] font-medium text-zinc-600 tracking-wider">
-                OR
-              </span>
-            </div>
+                <div className="flex items-center justify-center w-full my-3">
+                  <span className="text-[13px] font-medium text-zinc-600 tracking-wider">
+                    OR
+                  </span>
+                </div>
 
-            {/* Email Input */}
-            <div className="relative">
-              <Mail
-                className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500"
-                strokeWidth={1.5}
-              />
-              <input
-                type="email"
-                placeholder="Enter your email"
-                value={emailAddress}
-                onChange={(e) => setEmailAddress(e.target.value)}
-                className="w-full h-[52px] bg-[#141414] border border-[#262626] rounded-2xl pl-12 pr-4 text-[15px] text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
-              />
-            </div>
+                {/* Email Input */}
+                <div className="relative">
+                  <Mail
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500"
+                    strokeWidth={1.5}
+                  />
+                  <input
+                    type="email"
+                    placeholder="Enter your email"
+                    value={emailAddress}
+                    onChange={(e) => setEmailAddress(e.target.value)}
+                    className="w-full h-[52px] bg-[#141414] border border-[#262626] rounded-2xl pl-12 pr-4 text-[15px] text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
+                  />
+                </div>
 
-            {/* Continue Button */}
-            <button 
-              onClick={handleEmailSignIn}
-              disabled={isLoadingEmail || emailSent}
-              className="flex items-center justify-center w-full h-[52px] bg-[#0f172a] hover:bg-[#1e293b] text-[#3b82f6] font-semibold text-[15px] rounded-2xl transition-colors mt-1 disabled:opacity-50"
-            >
-              {isLoadingEmail ? <Loader2 className="w-5 h-5 animate-spin" /> : emailSent ? "Link Sent!" : "Continue"}
-            </button>
+                {/* Password Input */}
+                <div className="relative">
+                  <input
+                    type="password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full h-[52px] bg-[#141414] border border-[#262626] rounded-2xl px-4 text-[15px] text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
+                  />
+                </div>
 
-            {/* Terms text */}
-            <p className="text-[13px] text-zinc-500 text-center mt-6 leading-relaxed">
-              By continuing, you agree to Krea's
-              <br />
-              <a href="#" className="text-[#3b82f6] hover:underline">
-                Terms of Use
-              </a>{" "}
-              &{" "}
-              <a href="#" className="text-[#3b82f6] hover:underline">
-                Privacy Policy
-              </a>
-              .
-            </p>
+                {/* Continue Button */}
+                <button 
+                  onClick={handleEmailAuth}
+                  disabled={isLoadingEmail}
+                  className="flex items-center justify-center w-full h-[52px] bg-[#0f172a] hover:bg-[#1e293b] text-[#3b82f6] font-semibold text-[15px] rounded-2xl transition-colors mt-1 disabled:opacity-50"
+                >
+                  {isLoadingEmail ? <Loader2 className="w-5 h-5 animate-spin" /> : "Continue"}
+                </button>
+
+                {/* Mode Switcher */}
+                <div className="text-center mt-2">
+                  <button
+                    onClick={() => setMode(mode === "signIn" ? "signUp" : "signIn")}
+                    className="text-[13px] text-zinc-400 hover:text-white transition-colors"
+                  >
+                    {mode === "signIn" ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+                  </button>
+                </div>
+
+                {/* Terms text */}
+                <p className="text-[13px] text-zinc-500 text-center mt-6 leading-relaxed">
+                  By continuing, you agree to Krea's
+                  <br />
+                  <a href="#" className="text-[#3b82f6] hover:underline">
+                    Terms of Use
+                  </a>{" "}
+                  &{" "}
+                  <a href="#" className="text-[#3b82f6] hover:underline">
+                    Privacy Policy
+                  </a>
+                  .
+                </p>
+              </>
+            )}
           </div>
         </div>
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import AuthModal from "./AuthModal";
-import { UserButton, useUser } from "@clerk/nextjs";
+import { UserButton, useUser, SignOutButton } from "@clerk/nextjs";
 import {
   PanelLeft,
   LogIn,
@@ -14,6 +14,7 @@ import {
   BrainCircuit,
   Crop,
   Frame,
+  LogOut,
 } from "lucide-react";
 
 const MAIN_LINKS = [
@@ -190,12 +191,21 @@ export default function Sidebar({
       >
         {isLoaded ? (
           isSignedIn ? (
-            <div className={`flex w-full items-center ${isCollapsed ? "justify-center" : "justify-start px-2 py-1.5 bg-[#1a1a1a] rounded-xl border border-[#262626]"}`}>
-              <UserButton appearance={{ elements: { userButtonAvatarBox: "w-8 h-8" } }} />
+            <div className={`flex w-full items-center justify-between ${isCollapsed ? "justify-center p-0 bg-transparent border-transparent" : "px-2 py-1.5 bg-[#1a1a1a] rounded-xl border border-[#262626]"}`}>
+              <div className="flex items-center min-w-0">
+                <UserButton appearance={{ elements: { userButtonAvatarBox: "w-8 h-8 shrink-0" } }} />
+                {!isCollapsed && (
+                  <span className="ml-3 text-[14px] font-medium text-white truncate">
+                    {user.primaryEmailAddress?.emailAddress}
+                  </span>
+                )}
+              </div>
               {!isCollapsed && (
-                <span className="ml-3 text-[14px] font-medium text-white truncate w-full">
-                  {user.primaryEmailAddress?.emailAddress}
-                </span>
+                <SignOutButton>
+                  <button className="p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors ml-1 shrink-0 rounded-md hover:bg-[#2a2a2a]" title="Sign Out">
+                    <LogOut size={16} />
+                  </button>
+                </SignOutButton>
               )}
             </div>
           ) : (
