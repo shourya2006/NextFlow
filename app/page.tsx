@@ -1,35 +1,26 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
 import Sidebar from "@/components/home/Sidebar";
 import Hero from "@/components/home/Hero";
 import Tabs from "@/components/home/Tabs";
 import WorkflowsGrid from "@/components/home/WorkflowsGrid";
 import EmptyState from "@/components/home/EmptyState";
-
-type Workflow = { id: string; title: string; updatedAt: string };
+import { useWorkflowStore } from "@/store/workflowStore";
+import { useSidebarStore } from "@/store/sidebarStore";
 
 export default function Home() {
   const { isSignedIn, user, isLoaded } = useUser();
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const fetchWorkflows = async () => {
-    try {
-      const res = await fetch('/api/workflows');
-      if (res.ok) {
-        const data = await res.json();
-        setWorkflows(data);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { isCollapsed, toggleCollapse } = useSidebarStore();
+  const {
+    workflows,
+    loading,
+    searchQuery,
+    setSearchQuery,
+    fetchWorkflows,
+    filteredWorkflows,
+  } = useWorkflowStore();
 
   useEffect(() => {
     if (isLoaded) {
@@ -37,11 +28,13 @@ export default function Home() {
     }
   }, [isLoaded, isSignedIn, user?.id]);
 
+  const filtered = filteredWorkflows();
+
   return (
     <div className="flex w-full h-screen bg-[#111111] text-zinc-100 overflow-hidden font-sans">
       <Sidebar
         isCollapsed={isCollapsed}
-        toggleCollapse={() => setIsCollapsed(!isCollapsed)}
+        toggleCollapse={toggleCollapse}
       />
       <main
         className={`flex-1 flex flex-col bg-[#121212] transition-all duration-300 ${isCollapsed ? "ml-[56px]" : "ml-[260px]"}`}
@@ -52,8 +45,8 @@ export default function Home() {
           {loading ? (
             <div className="flex-1 flex items-center justify-center text-zinc-500">Loading workflows...</div>
           ) : workflows.length > 0 ? (
-            workflows.filter(w => w.title.toLowerCase().includes(searchQuery.toLowerCase())).length > 0 ? (
-              <WorkflowsGrid workflows={workflows.filter(w => w.title.toLowerCase().includes(searchQuery.toLowerCase()))} onWorkflowDeleted={fetchWorkflows} />
+            filtered.length > 0 ? (
+              <WorkflowsGrid workflows={filtered} onWorkflowDeleted={fetchWorkflows} />
             ) : (
               <div className="flex-1 flex items-center justify-center text-zinc-500">No workflows match your search.</div>
             )

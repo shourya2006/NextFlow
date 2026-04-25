@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
+import { workflowUpdateSchema } from '@/lib/schemas';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -66,6 +67,14 @@ export async function PUT(
     }
 
     const body = await request.json();
+    const parsed = workflowUpdateSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid request body", details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
 
     const existing = await prisma.workflow.findUnique({ where: { id } });
     if (existing && existing.userId !== null && existing.userId !== userId) {
@@ -73,9 +82,9 @@ export async function PUT(
     }
     
     const data: any = {};
-    if (body.title !== undefined) data.title = body.title;
-    if (body.nodes !== undefined) data.nodes = body.nodes;
-    if (body.edges !== undefined) data.edges = body.edges;
+    if (parsed.data.title !== undefined) data.title = parsed.data.title;
+    if (parsed.data.nodes !== undefined) data.nodes = parsed.data.nodes;
+    if (parsed.data.edges !== undefined) data.edges = parsed.data.edges;
     
     const workflow = await prisma.workflow.upsert({
       where: { id },
@@ -85,9 +94,9 @@ export async function PUT(
       },
       create: {
         id,
-        title: body.title || "Untitled",
-        nodes: body.nodes || [],
-        edges: body.edges || [],
+        title: parsed.data.title || "Untitled",
+        nodes: parsed.data.nodes || [],
+        edges: parsed.data.edges || [],
         userId: userId || null,
       }
     });

@@ -20,6 +20,7 @@ import UploadVideoNode from "@/components/nodes/UploadVideoNode";
 import LLMNode from "@/components/nodes/LLMNode";
 import CropImageNode from "@/components/nodes/CropImageNode";
 import ExtractFrameNode from "@/components/nodes/ExtractFrameNode";
+import { useSidebarStore } from "@/store/sidebarStore";
 import {
   Grip,
   Plus,
@@ -37,7 +38,7 @@ export default function WorkflowEditor({
 }) {
   const resolvedParams = use(params);
   const id = resolvedParams.id;
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const { isCollapsed, toggleCollapse } = useSidebarStore();
   const [activeTool, setActiveTool] = useState("cursor");
 
   const nodeTypes = {
@@ -195,7 +196,7 @@ export default function WorkflowEditor({
     <div className="flex w-screen h-screen bg-[#0a0a0a] text-zinc-100 overflow-hidden font-sans">
       <Sidebar
         isCollapsed={isCollapsed}
-        toggleCollapse={() => setIsCollapsed(!isCollapsed)}
+        toggleCollapse={toggleCollapse}
         onAddNode={handleAddNode}
       />
 

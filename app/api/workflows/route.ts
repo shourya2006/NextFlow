@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
+import { workflowCreateSchema } from '@/lib/schemas';
 
 export async function GET() {
   try {
@@ -9,7 +10,7 @@ export async function GET() {
     const defaultWorkflow = {
       id: 'default',
       title: 'Default Workflow',
-      updatedAt: new Date(0).toISOString(), // Use epoch so it appears at the end or doesn't override real ones, or actually just any date.
+      updatedAt: new Date(0).toISOString()
     };
 
     if (!userId) {
@@ -43,13 +44,21 @@ export async function POST(request: Request) {
     }
     
     const body = await request.json();
+    const parsed = workflowCreateSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid request body", details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
     
     const workflow = await prisma.workflow.create({
       data: {
-        title: body.title || "Untitled",
-        nodes: body.nodes || [],
-        edges: body.edges || [],
-        userId: userId || null,
+        title: parsed.data.title,
+        nodes: parsed.data.nodes,
+        edges: parsed.data.edges,
+        userId: userId,
       }
     });
     
