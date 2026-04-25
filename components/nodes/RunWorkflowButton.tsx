@@ -2,6 +2,7 @@ import { Play, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useReactFlow, useEdges, useStore } from "@xyflow/react";
 import { useRunStore } from "@/store/runStore";
+import { getDescendants } from "./utils";
 
 export default function RunWorkflowButton({
   nodeId,
@@ -14,11 +15,17 @@ export default function RunWorkflowButton({
   const { getNodes, getEdges, setNodes } = useReactFlow();
   const nodeCount = useStore((s) => s.nodes.length);
   const [isRunning, setIsRunningLocal] = useState(false);
-  const setIsRunning = useRunStore((s) => s.setIsRunning);
+  const { setRunningIds, clearRunning } = useRunStore();
 
   const setRunning = (v: boolean) => {
     setIsRunningLocal(v);
-    setIsRunning(v);
+    const { nodes: descendantNodes, edges: descendantEdges, nodeIds } = getDescendants(nodeId, getNodes(), getEdges());
+    
+    if (v) {
+      setRunningIds(nodeIds);
+    } else {
+      clearRunning();
+    }
   };
 
   const isRoot = !edges.some((e) => e.target === nodeId);
@@ -29,10 +36,12 @@ export default function RunWorkflowButton({
     if (isRunning) return;
     setRunning(true);
     try {
-      const nodes = getNodes();
+      const allNodes = getNodes();
       const allEdges = getEdges();
       
-      let currentNodes = [...nodes];
+      const { nodes: descendantNodes, edges: descendantEdges } = getDescendants(nodeId, allNodes, allEdges);
+      
+      let currentNodes = [...descendantNodes];
       const transloaditKey = process.env.NEXT_PUBLIC_TRANSLOADIT_AUTH_KEY;
       let graphChanged = false;
 
@@ -159,13 +168,18 @@ export default function RunWorkflowButton({
         }
         
         if (graphChanged) {
-          setNodes(currentNodes);
+          setNodes((prev) => 
+            prev.map(node => {
+              const updated = currentNodes.find(un => un.id === node.id);
+              return updated ? { ...node, data: updated.data } : node;
+            })
+          );
         }
         
       } catch (e) {
       }
 
-      if (nodes.length === 1 && (nodes[0].type === "text" || nodes[0].type === "image" || nodes[0].type === "video")) {
+      if (currentNodes.length === 1 && (currentNodes[0].type === "text" || currentNodes[0].type === "image" || currentNodes[0].type === "video")) {
         return;
       }
 
@@ -178,7 +192,7 @@ export default function RunWorkflowButton({
           body: JSON.stringify({
             startNodeId: nodeId,
             nodes: currentNodes,
-            edges: allEdges,
+            edges: descendantEdges,
           }),
         });
 
@@ -190,21 +204,19 @@ export default function RunWorkflowButton({
         
         if (result.success && result.result?.executionOrder) {
           const executedNodes = result.result.executionOrder;
-          let updatedNodes = getNodes().map(node => {
-            const executed = executedNodes.find((en: any) => en.id === node.id);
-            if (executed) {
-              return { ...node, data: executed.data };
-            }
-            return node;
-          });
-          setNodes(updatedNodes);
+          
+          setNodes((prev) => 
+            prev.map(node => {
+              const executed = executedNodes.find((en: any) => en.id === node.id);
+              return executed ? { ...node, data: executed.data } : node;
+            })
+          );
 
-          for (let i = 0; i < updatedNodes.length; i++) {
-            const n = updatedNodes[i];
-            if (n.type === "image" && n.data.output && (n.data.output as string).startsWith("data:")) {
+          for (const executedNode of executedNodes) {
+            if (executedNode.type === "image" && executedNode.data.output && (executedNode.data.output as string).startsWith("data:")) {
               if (!transloaditKey) continue;
               try {
-                const dataUrl = n.data.output as string;
+                const dataUrl = executedNode.data.output as string;
                 const res = await fetch(dataUrl);
                 const blob = await res.blob();
 
@@ -213,7 +225,7 @@ export default function RunWorkflowButton({
                   auth: { key: transloaditKey },
                   steps: { resize: { robot: "/image/resize" } }
                 }));
-                formData.append("file", blob, `image_${n.id}.png`);
+                formData.append("file", blob, `image_${executedNode.id}.png`);
 
                 const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
                   method: "POST",
@@ -239,8 +251,9 @@ export default function RunWorkflowButton({
                 }
 
                 if (sslUrl) {
-                  updatedNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
-                  setNodes([...updatedNodes]);
+                  setNodes((prev) => 
+                    prev.map(node => node.id === executedNode.id ? { ...node, data: { ...node.data, output: sslUrl } } : node)
+                  );
                 }
               } catch (e) {}
             }

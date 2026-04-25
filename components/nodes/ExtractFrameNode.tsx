@@ -10,7 +10,8 @@ export default function ExtractFrameNode({ id, data, selected }: { id: string, d
   const edges = useEdges();
   const nodes = useNodes();
   const [showModal, setShowModal] = useState(false);
-  const isRunning = useRunStore((s) => s.isRunning);
+  const runningNodeIds = useRunStore((s) => s.runningNodeIds);
+  const isRunning = runningNodeIds.has(id);
 
   const urlEdge = edges.find(e => e.target === id && e.targetHandle === "url");
   const urlSourceNode = urlEdge ? nodes.find(n => n.id === urlEdge.source) : null;

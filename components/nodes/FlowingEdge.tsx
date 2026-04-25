@@ -8,6 +8,8 @@ import { useRunStore } from "@/store/runStore";
 
 export default function FlowingEdge({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -17,7 +19,8 @@ export default function FlowingEdge({
   style = {},
   markerEnd,
 }: EdgeProps) {
-  const isRunning = useRunStore((s) => s.isRunning);
+  const runningNodeIds = useRunStore((s) => s.runningNodeIds);
+  const isRunning = runningNodeIds.has(source) && runningNodeIds.has(target);
   const [edgePath] = getBezierPath({
     sourceX,
     sourceY,

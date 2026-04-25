@@ -5,6 +5,7 @@ import {
   ReactFlow,
   Background,
   BackgroundVariant,
+  Panel,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -22,6 +23,7 @@ import CropImageNode from "@/components/nodes/CropImageNode";
 import ExtractFrameNode from "@/components/nodes/ExtractFrameNode";
 import { useSidebarStore } from "@/store/sidebarStore";
 import FlowingEdge from "@/components/nodes/FlowingEdge";
+import RunSelectionButton from "@/components/nodes/RunSelectionButton";
 import {
   Grip,
   Undo2,
@@ -310,77 +312,17 @@ export default function WorkflowEditor({
           pt-14 md:pt-0
           ml-0 ${isCollapsed ? "md:ml-[56px]" : "md:ml-[260px]"}`}
       >
-        {/* Title bar */}
-        <div className="absolute top-[calc(56px+12px)] md:top-4 left-3 md:left-4 z-50 flex items-center gap-2 bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-1.5 shadow-sm max-w-[calc(100vw-24px)] md:max-w-none">
-          <Grip className="w-4 h-4 text-zinc-400 shrink-0" />
-          <span className="text-zinc-500 mx-0.5">›</span>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="bg-transparent border-none outline-none text-white text-sm font-medium placeholder-zinc-500 min-w-0"
-            style={{ width: `${Math.max(8, title.length) + 1}ch` }}
-            placeholder="Workflow title"
-          />
-        </div>
-
-        {/* Center Screen TEXT */}
+        {/* Center Screen hint */}
         {nodes.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className="flex flex-col items-center gap-1.5 opacity-40 px-4 text-center">
-              <p className="text-[14px] sm:text-[15px] font-medium text-zinc-300">
-                Add a node
-              </p>
-              <p className="text-[12px] sm:text-[13px] text-zinc-400">
-                Use the sidebar menu to add nodes
-              </p>
+              <p className="text-[14px] sm:text-[15px] font-medium text-zinc-300">Add a node</p>
+              <p className="text-[12px] sm:text-[13px] text-zinc-400">Use the sidebar menu to add nodes</p>
             </div>
           </div>
         )}
 
-        {/* Toolbar */}
-        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 p-1.5 bg-[#1f1f1f] border border-[#2a2a2a] rounded-xl shadow-xl">
-          <button
-            onClick={handleUndo}
-            title="Undo (⌘Z)"
-            className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100"
-          >
-            <Undo2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleRedo}
-            title="Redo (⌘⇧Z)"
-            className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100"
-          >
-            <Redo2 className="w-4 h-4" />
-          </button>
-
-          <div className="w-[1px] h-6 bg-[#333] mx-0.5"></div>
-
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            title="Import workflow"
-            className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100"
-          >
-            <Upload className="w-4 h-4" />
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json"
-            onChange={handleImport}
-            className="hidden"
-          />
-          <button
-            onClick={handleExport}
-            title="Export workflow"
-            className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* React Flow Canvas */}
+        {/* React Flow Canvas — title bar, toolbar, and RunSelectionButton all live INSIDE here */}
         <div className="absolute inset-0 z-0">
           <ReactFlow
             nodes={nodes}
@@ -395,12 +337,49 @@ export default function WorkflowEditor({
             className="dark"
             proOptions={{ hideAttribution: true }}
           >
-            <Background
-              color="#222"
-              variant={BackgroundVariant.Dots}
-              gap={24}
-              size={1.5}
-            />
+            <Background color="#222" variant={BackgroundVariant.Dots} gap={24} size={1.5} />
+
+            {/* Title bar */}
+            <Panel position="top-left" style={{ margin: 0 }}>
+              <div className="mt-[calc(56px+8px)] md:mt-3 ml-2 md:ml-3 flex items-center gap-2 bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-1.5 shadow-sm max-w-[calc(100vw-80px)] md:max-w-none">
+                <Grip className="w-4 h-4 text-zinc-400 shrink-0" />
+                <span className="text-zinc-500 mx-0.5">›</span>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="bg-transparent border-none outline-none text-white text-sm font-medium placeholder-zinc-500 min-w-0"
+                  style={{ width: `${Math.max(8, title.length) + 1}ch` }}
+                  placeholder="Workflow title"
+                />
+              </div>
+            </Panel>
+
+            {/* Toolbar */}
+            <Panel position="bottom-center" style={{ margin: 0 }}>
+              <div className="mb-5 flex items-center gap-1 p-1.5 bg-[#1f1f1f] border border-[#2a2a2a] rounded-xl shadow-xl">
+                <button onClick={handleUndo} title="Undo (⌘Z)" className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100">
+                  <Undo2 className="w-4 h-4" />
+                </button>
+                <button onClick={handleRedo} title="Redo (⌘⇧Z)" className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100">
+                  <Redo2 className="w-4 h-4" />
+                </button>
+
+                <div className="w-[1px] h-6 bg-[#333] mx-0.5" />
+
+                <button onClick={() => fileInputRef.current?.click()} title="Import workflow" className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100">
+                  <Upload className="w-4 h-4" />
+                </button>
+                <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} className="hidden" />
+                <button onClick={handleExport} title="Export workflow" className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100">
+                  <Download className="w-4 h-4" />
+                </button>
+
+                {/* Run Selection — only visible when nodes are selected */}
+                <div className="w-[1px] h-6 bg-[#333] mx-0.5" />
+                <RunSelectionButton />
+              </div>
+            </Panel>
           </ReactFlow>
         </div>
       </main>

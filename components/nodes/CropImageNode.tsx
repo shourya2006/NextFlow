@@ -10,7 +10,8 @@ export default function CropImageNode({ id, data, selected }: { id: string, data
   const edges = useEdges();
   const nodes = useNodes();
   const [showModal, setShowModal] = useState(false);
-  const isRunning = useRunStore((s) => s.isRunning);
+  const runningNodeIds = useRunStore((s) => s.runningNodeIds);
+  const isRunning = runningNodeIds.has(id);
 
   const imageEdge = edges.find(e => e.target === id);
   const imageSourceNode = imageEdge ? nodes.find(n => n.id === imageEdge.source) : null;

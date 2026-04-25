@@ -10,7 +10,8 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
   const { setNodes } = useReactFlow();
   const edges = useEdges();
   const nodes = useNodes();
-  const isRunning = useRunStore((s) => s.isRunning);
+  const runningNodeIds = useRunStore((s) => s.runningNodeIds);
+  const isRunning = runningNodeIds.has(id);
 
   const textEdge = edges.find(e => e.target === id && e.targetHandle === "text");
   const textSourceNode = textEdge ? nodes.find(n => n.id === textEdge.source) : null;

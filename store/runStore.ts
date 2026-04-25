@@ -1,11 +1,17 @@
 import { create } from "zustand";
 
 interface RunStore {
+  runningNodeIds: Set<string>;
+  /** Returns true if ANY node is running */
   isRunning: boolean;
-  setIsRunning: (v: boolean) => void;
+  setRunningIds: (ids: string[]) => void;
+  clearRunning: () => void;
 }
 
 export const useRunStore = create<RunStore>((set) => ({
+  runningNodeIds: new Set(),
   isRunning: false,
-  setIsRunning: (v) => set({ isRunning: v }),
+  setRunningIds: (ids) =>
+    set({ runningNodeIds: new Set(ids), isRunning: ids.length > 0 }),
+  clearRunning: () => set({ runningNodeIds: new Set(), isRunning: false }),
 }));
