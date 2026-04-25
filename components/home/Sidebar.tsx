@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
+import AuthModal from "./AuthModal";
 import {
   PanelLeft,
   LogIn,
@@ -66,10 +70,13 @@ export default function Sidebar({
   toggleCollapse: () => void;
   onAddNode?: (nodeType: string) => void;
 }) {
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
   return (
-    <div
-      className={`h-screen bg-[#000000] border-r border-[#262626] flex flex-col text-sm fixed left-0 top-0 text-zinc-300 transition-all duration-300 ${isCollapsed ? "w-[56px]" : "w-[260px]"}`}
-    >
+    <>
+      <div
+        className={`h-screen bg-[#000000] border-r border-[#262626] flex flex-col text-sm fixed left-0 top-0 text-zinc-300 transition-all duration-300 ${isCollapsed ? "w-[56px]" : "w-[260px]"}`}
+      >
       {/* Header Container */}
       <div
         className={`p-4 flex items-center ${isCollapsed ? "justify-center" : "justify-start lg:pl-[14px]"} pb-2`}
@@ -180,6 +187,7 @@ export default function Sidebar({
         className={`mb-4 mt-auto flex px-3 ${isCollapsed ? "justify-center px-0" : ""}`}
       >
         <button
+          onClick={() => setIsAuthModalOpen(true)}
           className={`flex items-center justify-center bg-[#2563eb] hover:bg-[#3b82f6] text-white font-medium transition-colors shadow-sm ${
             isCollapsed
               ? "w-full h-8 rounded-sm"
@@ -198,6 +206,8 @@ export default function Sidebar({
           scrollbar-width: none;
         }
       `}</style>
-    </div>
+      </div>
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+    </>
   );
 }
