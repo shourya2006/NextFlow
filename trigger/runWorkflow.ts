@@ -80,9 +80,16 @@ export const runWorkflow = task({
       }
 
       if (node.type === "text") {
-        if (!node.data.output) {
-          node.data.output = node.data.text || "";
+        const incomingEdges = edges.filter((e: any) => e.target === node.id);
+        if (incomingEdges.length > 0) {
+          for (const edge of incomingEdges) {
+            const sourceNode = orderedNodes.find((n: any) => n.id === edge.source);
+            if (sourceNode && sourceNode.data.output) {
+              node.data.text = sourceNode.data.output;
+            }
+          }
         }
+        node.data.output = node.data.text || "";
         continue;
       }
 

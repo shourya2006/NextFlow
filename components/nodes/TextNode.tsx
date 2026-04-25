@@ -18,12 +18,12 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
     : (data.text || "");
 
   useEffect(() => {
-    if (isConnected && data.output !== displayValue) {
+    if (isConnected && data.text !== displayValue) {
       setNodes((nds) => 
-        nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, output: displayValue, text: displayValue } } : n))
+        nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, text: displayValue } } : n))
       );
     }
-  }, [isConnected, displayValue, data.output, id, setNodes]);
+  }, [isConnected, displayValue, data.text, id, setNodes]);
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (isConnected) return;
