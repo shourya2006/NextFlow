@@ -2,7 +2,7 @@ import { Play, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useReactFlow, useEdges, useStore } from "@xyflow/react";
 import { useRunStore } from "@/store/runStore";
-import { getDescendants } from "./utils";
+import { getConnectedComponent } from "./utils";
 
 export default function RunWorkflowButton({
   nodeId,
@@ -19,7 +19,7 @@ export default function RunWorkflowButton({
 
   const setRunning = (v: boolean) => {
     setIsRunningLocal(v);
-    const { nodes: descendantNodes, edges: descendantEdges, nodeIds } = getDescendants(nodeId, getNodes(), getEdges());
+    const { nodes: componentNodes, nodeIds } = getConnectedComponent(nodeId, getNodes(), getEdges());
     
     if (v) {
       setRunningIds(nodeIds);
@@ -39,9 +39,9 @@ export default function RunWorkflowButton({
       const allNodes = getNodes();
       const allEdges = getEdges();
       
-      const { nodes: descendantNodes, edges: descendantEdges } = getDescendants(nodeId, allNodes, allEdges);
+      const { nodes: componentNodes, edges: componentEdges } = getConnectedComponent(nodeId, allNodes, allEdges);
       
-      let currentNodes = [...descendantNodes];
+      let currentNodes = [...componentNodes];
       const transloaditKey = process.env.NEXT_PUBLIC_TRANSLOADIT_AUTH_KEY;
       let graphChanged = false;
 
@@ -192,7 +192,7 @@ export default function RunWorkflowButton({
           body: JSON.stringify({
             startNodeId: nodeId,
             nodes: currentNodes,
-            edges: descendantEdges,
+            edges: componentEdges,
           }),
         });
 
