@@ -1,4 +1,8 @@
-import { X, Mail } from "lucide-react";
+"use client";
+
+import { X, Mail, Loader2 } from "lucide-react";
+import { useClerk } from "@clerk/nextjs";
+import { useState } from "react";
 
 export default function AuthModal({
   isOpen,
@@ -7,7 +11,53 @@ export default function AuthModal({
   isOpen: boolean;
   onClose: () => void;
 }) {
+  const clerk = useClerk();
+  const [emailAddress, setEmailAddress] = useState("");
+  const [isLoadingGoogle, setIsLoadingGoogle] = useState(false);
+  const [isLoadingEmail, setIsLoadingEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+
   if (!isOpen) return null;
+
+  const handleGoogleSignIn = () => {
+    if (!clerk.loaded) return;
+    setIsLoadingGoogle(true);
+    clerk.client.signIn.authenticateWithRedirect({
+      strategy: "oauth_google",
+      redirectUrl: "/sso-callback",
+      redirectUrlComplete: "/",
+    });
+  };
+
+  const handleEmailSignIn = async () => {
+    if (!clerk.loaded || !emailAddress.trim()) return;
+    setIsLoadingEmail(true);
+    try {
+      const signInAttempt = await clerk.client.signIn.create({
+        identifier: emailAddress,
+      });
+      const factor = signInAttempt.supportedFirstFactors?.find(
+        (f) => f.strategy === "email_link"
+      ) as any;
+      
+      if (!factor) {
+        console.error("Email link not supported for this user");
+        setIsLoadingEmail(false);
+        return;
+      }
+
+      const { startEmailLinkFlow } = clerk.client.signIn.createEmailLinkFlow();
+      await startEmailLinkFlow({
+        emailAddressId: factor.emailAddressId,
+        redirectUrl: "http://localhost:3000/",
+      });
+      setEmailSent(true);
+    } catch (err) {
+      console.error("Error signing in with email:", err);
+    } finally {
+      setIsLoadingEmail(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -29,13 +79,21 @@ export default function AuthModal({
           </h2>
 
           <div className="w-full max-w-[340px] flex flex-col gap-4">
-            <button className="relative flex items-center justify-center w-full h-[52px] bg-white hover:bg-zinc-100 text-black font-semibold text-[15px] rounded-2xl transition-colors">
+            <button 
+              onClick={handleGoogleSignIn}
+              disabled={isLoadingGoogle}
+              className="relative flex items-center justify-center w-full h-[52px] bg-white hover:bg-zinc-100 text-black font-semibold text-[15px] rounded-2xl transition-colors disabled:opacity-50"
+            >
               <div className="absolute left-5 flex items-center justify-center">
-                <img
-                  src="https://www.svgrepo.com/show/475656/google-color.svg"
-                  alt="Google"
-                  className="w-5 h-5"
-                />
+                {isLoadingGoogle ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <img
+                    src="https://www.svgrepo.com/show/475656/google-color.svg"
+                    alt="Google"
+                    className="w-5 h-5"
+                  />
+                )}
               </div>
               <span>Continue with Google</span>
             </button>
@@ -55,13 +113,19 @@ export default function AuthModal({
               <input
                 type="email"
                 placeholder="Enter your email"
+                value={emailAddress}
+                onChange={(e) => setEmailAddress(e.target.value)}
                 className="w-full h-[52px] bg-[#141414] border border-[#262626] rounded-2xl pl-12 pr-4 text-[15px] text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
               />
             </div>
 
             {/* Continue Button */}
-            <button className="w-full h-[52px] bg-[#0f172a] hover:bg-[#1e293b] text-[#3b82f6] font-semibold text-[15px] rounded-2xl transition-colors mt-1">
-              Continue
+            <button 
+              onClick={handleEmailSignIn}
+              disabled={isLoadingEmail || emailSent}
+              className="flex items-center justify-center w-full h-[52px] bg-[#0f172a] hover:bg-[#1e293b] text-[#3b82f6] font-semibold text-[15px] rounded-2xl transition-colors mt-1 disabled:opacity-50"
+            >
+              {isLoadingEmail ? <Loader2 className="w-5 h-5 animate-spin" /> : emailSent ? "Link Sent!" : "Continue"}
             </button>
 
             {/* Terms text */}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import AuthModal from "./AuthModal";
+import { UserButton, useUser } from "@clerk/nextjs";
 import {
   PanelLeft,
   LogIn,
@@ -71,6 +72,7 @@ export default function Sidebar({
   onAddNode?: (nodeType: string) => void;
 }) {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const { isLoaded, isSignedIn, user } = useUser();
 
   return (
     <>
@@ -186,16 +188,31 @@ export default function Sidebar({
       <div
         className={`mb-4 mt-auto flex px-3 ${isCollapsed ? "justify-center px-0" : ""}`}
       >
-        <button
-          onClick={() => setIsAuthModalOpen(true)}
-          className={`flex items-center justify-center bg-[#2563eb] hover:bg-[#3b82f6] text-white font-medium transition-colors shadow-sm ${
-            isCollapsed
-              ? "w-full h-8 rounded-sm"
-              : "w-full h-12 rounded-xl text-[14px]"
-          }`}
-        >
-          {isCollapsed ? <LogIn size={18} strokeWidth={2.5} /> : "Sign in"}
-        </button>
+        {isLoaded ? (
+          isSignedIn ? (
+            <div className={`flex w-full items-center ${isCollapsed ? "justify-center" : "justify-start px-2 py-1.5 bg-[#1a1a1a] rounded-xl border border-[#262626]"}`}>
+              <UserButton appearance={{ elements: { userButtonAvatarBox: "w-8 h-8" } }} />
+              {!isCollapsed && (
+                <span className="ml-3 text-[14px] font-medium text-white truncate w-full">
+                  {user.primaryEmailAddress?.emailAddress}
+                </span>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              className={`flex items-center justify-center bg-[#2563eb] hover:bg-[#3b82f6] text-white font-medium transition-colors shadow-sm ${
+                isCollapsed
+                  ? "w-full h-8 rounded-sm"
+                  : "w-full h-12 rounded-xl text-[14px]"
+              }`}
+            >
+              {isCollapsed ? <LogIn size={18} strokeWidth={2.5} /> : "Sign in"}
+            </button>
+          )
+        ) : (
+          <div className="w-full h-12 bg-[#1a1a1a] rounded-xl animate-pulse"></div>
+        )}
       </div>
       <style>{`
         .hidden-scrollbar::-webkit-scrollbar {
