@@ -6,6 +6,7 @@ import {
   Background,
   BackgroundVariant,
   Panel,
+  MiniMap,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -338,6 +339,23 @@ export default function WorkflowEditor({
             proOptions={{ hideAttribution: true }}
           >
             <Background color="#222" variant={BackgroundVariant.Dots} gap={24} size={1.5} />
+            <MiniMap 
+              className="hidden md:block"
+              style={{
+                backgroundColor: '#1a1a1a',
+                borderRadius: '12px',
+                border: '1px solid #262626',
+              }}
+              nodeColor={(n) => {
+                if (n.type === 'text') return '#eab308';
+                if (n.type === 'image' || n.type === 'video' || n.type === 'crop' || n.type === 'frame') return '#3b82f6';
+                if (n.type === 'llm') return '#8b5cf6';
+                return '#262626';
+              }}
+              maskColor="rgba(0, 0, 0, 0.4)"
+              maskStrokeColor="#333"
+              maskStrokeWidth={2}
+            />
 
             {/* Title bar */}
             <Panel position="top-left" style={{ margin: 0 }}>
