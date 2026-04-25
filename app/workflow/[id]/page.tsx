@@ -341,6 +341,8 @@ export default function WorkflowEditor({
             <Background color="#222" variant={BackgroundVariant.Dots} gap={24} size={1.5} />
             <MiniMap 
               className="hidden md:block"
+              pannable
+              zoomable
               style={{
                 backgroundColor: '#1a1a1a',
                 borderRadius: '12px',
