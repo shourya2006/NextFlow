@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useCallback, useEffect } from "react";
+import { use, useState, useCallback, useEffect, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -23,13 +23,13 @@ import ExtractFrameNode from "@/components/nodes/ExtractFrameNode";
 import { useSidebarStore } from "@/store/sidebarStore";
 import {
   Grip,
-  Plus,
-  MousePointer2,
-  Hand,
-  Scissors,
-  SquareDashed,
-  Link as LinkIcon,
+  Undo2,
+  Redo2,
+  Download,
+  Upload,
 } from "lucide-react";
+
+type HistoryEntry = { nodes: Node[]; edges: Edge[] };
 
 export default function WorkflowEditor({
   params,
@@ -39,7 +39,6 @@ export default function WorkflowEditor({
   const resolvedParams = use(params);
   const id = resolvedParams.id;
   const { isCollapsed, toggleCollapse } = useSidebarStore();
-  const [activeTool, setActiveTool] = useState("cursor");
 
   const nodeTypes = {
     text: TextNode,
@@ -54,6 +53,107 @@ export default function WorkflowEditor({
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [title, setTitle] = useState("Untitled");
   const [loading, setLoading] = useState(true);
+
+  // ─── Undo / Redo history ───
+  const historyRef = useRef<HistoryEntry[]>([]);
+  const historyIndexRef = useRef(-1);
+  const isUndoRedoRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const historyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pushHistory = useCallback((n: Node[], e: Edge[]) => {
+    if (isUndoRedoRef.current) return;
+
+    // Deduplicate: skip if identical to current entry
+    const snapshot = JSON.stringify({ nodes: n, edges: e });
+    if (historyIndexRef.current >= 0) {
+      const current = historyRef.current[historyIndexRef.current];
+      if (JSON.stringify({ nodes: current.nodes, edges: current.edges }) === snapshot) return;
+    }
+
+    const next = historyIndexRef.current + 1;
+    historyRef.current = historyRef.current.slice(0, next);
+    historyRef.current.push({ nodes: structuredClone(n), edges: structuredClone(e) });
+    historyIndexRef.current = next;
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (historyIndexRef.current <= 0) return;
+    historyIndexRef.current -= 1;
+    const entry = historyRef.current[historyIndexRef.current];
+    isUndoRedoRef.current = true;
+    setNodes(entry.nodes);
+    setEdges(entry.edges);
+    setTimeout(() => { isUndoRedoRef.current = false; }, 200);
+  }, [setNodes, setEdges]);
+
+  const handleRedo = useCallback(() => {
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+    historyIndexRef.current += 1;
+    const entry = historyRef.current[historyIndexRef.current];
+    isUndoRedoRef.current = true;
+    setNodes(entry.nodes);
+    setEdges(entry.edges);
+    setTimeout(() => { isUndoRedoRef.current = false; }, 200);
+  }, [setNodes, setEdges]);
+
+  // Debounced history push on nodes/edges change
+  useEffect(() => {
+    if (loading || isUndoRedoRef.current) return;
+    if (historyTimerRef.current) clearTimeout(historyTimerRef.current);
+    historyTimerRef.current = setTimeout(() => {
+      pushHistory(nodes, edges);
+    }, 500);
+    return () => {
+      if (historyTimerRef.current) clearTimeout(historyTimerRef.current);
+    };
+  }, [nodes, edges, loading, pushHistory]);
+
+  // Keyboard shortcuts: Ctrl/Cmd+Z for undo, Ctrl/Cmd+Shift+Z for redo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [handleUndo, handleRedo]);
+
+  // ─── Import / Export ───
+  const handleExport = useCallback(() => {
+    const data = JSON.stringify({ title, nodes, edges }, null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title.replace(/\s+/g, "_").toLowerCase() || "workflow"}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [title, nodes, edges]);
+
+  const handleImport = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const json = JSON.parse(ev.target?.result as string);
+          if (json.nodes) setNodes(json.nodes);
+          if (json.edges) setEdges(json.edges);
+          if (json.title) setTitle(json.title);
+        } catch (err) {
+          console.error("Failed to import workflow", err);
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = "";
+    },
+    [setNodes, setEdges]
+  );
 
   // Load workflow data on mount
   useEffect(() => {
@@ -235,41 +335,44 @@ export default function WorkflowEditor({
         )}
 
         {/* Toolbar */}
-        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center p-1.5 bg-[#1f1f1f] border border-[#2a2a2a] rounded-xl shadow-xl">
-          <button className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100">
-            <Plus className="w-5 h-5" strokeWidth={2} />
+        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 p-1.5 bg-[#1f1f1f] border border-[#2a2a2a] rounded-xl shadow-xl">
+          <button
+            onClick={handleUndo}
+            title="Undo (⌘Z)"
+            className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100"
+          >
+            <Undo2 className="w-4 h-4" />
           </button>
-          <div className="w-[1px] h-6 bg-[#333] mx-1"></div>
+          <button
+            onClick={handleRedo}
+            title="Redo (⌘⇧Z)"
+            className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100"
+          >
+            <Redo2 className="w-4 h-4" />
+          </button>
+
+          <div className="w-[1px] h-6 bg-[#333] mx-0.5"></div>
 
           <button
-            onClick={() => setActiveTool("cursor")}
-            className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${activeTool === "cursor" ? "bg-[#333] text-white" : "hover:bg-[#333] text-zinc-400 hover:text-zinc-100"}`}
+            onClick={() => fileInputRef.current?.click()}
+            title="Import workflow"
+            className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100"
           >
-            <MousePointer2 className="w-4 h-4" />
+            <Upload className="w-4 h-4" />
           </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleImport}
+            className="hidden"
+          />
           <button
-            onClick={() => setActiveTool("hand")}
-            className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${activeTool === "hand" ? "bg-[#333] text-white" : "hover:bg-[#333] text-zinc-400 hover:text-zinc-100"}`}
+            onClick={handleExport}
+            title="Export workflow"
+            className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100"
           >
-            <Hand className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setActiveTool("cut")}
-            className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${activeTool === "cut" ? "bg-[#333] text-white" : "hover:bg-[#333] text-zinc-400 hover:text-zinc-100"}`}
-          >
-            <Scissors className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setActiveTool("boxSelect")}
-            className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${activeTool === "boxSelect" ? "bg-[#333] text-white" : "hover:bg-[#333] text-zinc-400 hover:text-zinc-100"}`}
-          >
-            <SquareDashed className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setActiveTool("link")}
-            className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${activeTool === "link" ? "bg-[#333] text-white" : "hover:bg-[#333] text-zinc-400 hover:text-zinc-100"}`}
-          >
-            <LinkIcon className="w-4 h-4" />
+            <Download className="w-4 h-4" />
           </button>
         </div>
 
