@@ -1,36 +1,88 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# NextFlow
+
+NextFlow is a powerful, visual node-based workflow automation builder. It allows users to create, connect, and execute complex workflows involving media processing and AI generation through an intuitive drag-and-drop interface.
+
+## Features
+
+- **Visual Workflow Builder**: Interactive drag-and-drop canvas powered by [React Flow](https://reactflow.dev/).
+- **AI Integration**: Built-in support for LLM nodes using Google Generative AI (Gemini).
+- **Media Processing**: Extract frames from videos and crop images natively using background workers.
+- **Background Tasks**: Reliable, asynchronous execution of workflow nodes using [Trigger.dev v3](https://trigger.dev/).
+- **Authentication**: Secure user authentication and session management via [Clerk](https://clerk.com/).
+- **Database**: PostgreSQL integration with [Neon](https://neon.tech/) and Prisma ORM.
+
+## Tech Stack
+
+- **Framework**: Next.js (App Router)
+- **Visual Nodes**: React Flow
+- **Background Jobs**: Trigger.dev v3
+- **Database**: PostgreSQL (Neon) & Prisma ORM
+- **Auth**: Clerk
+- **AI**: Google Generative AI (Gemini)
+- **Media Processing**: FFmpeg (fluent-ffmpeg), Sharp
+- **Styling**: Tailwind CSS
 
 ## Getting Started
 
-First, run the development server:
+### 1. Clone the repository
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <your-repo-url>
+cd nextflow
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Install dependencies
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. Setup Environment Variables
 
-## Learn More
+Copy the `.env.example` file to `.env.local` and fill in your keys:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cp .env.example .env.local
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+You will need to set up and configure keys for:
+- **Clerk**: Publishable and Secret keys for authentication.
+- **Neon / PostgreSQL**: Database connection string for Prisma.
+- **Trigger.dev**: Secret key for background workers.
+- **Gemini**: API key for the LLM node.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 4. Setup Database
 
-## Deploy on Vercel
+Run the Prisma migrations to initialize your database schema:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npx prisma generate
+npx prisma db push
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 5. Run the Application locally
+
+You will need two terminal windows running simultaneously to handle the Next.js frontend and the Trigger.dev background workers.
+
+**Terminal 1: Next.js Dev Server**
+```bash
+npm run dev
+```
+
+**Terminal 2: Trigger.dev Background Worker**
+```bash
+npx trigger.dev@latest dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to view the application in your browser.
+
+## Deployment
+
+To deploy NextFlow to production:
+
+1. **Frontend**: Deploy your Next.js application to Vercel, Netlify, or your preferred hosting provider. Be sure to add all environment variables.
+2. **Background Tasks**: Deploy your Trigger.dev tasks to Trigger.dev Cloud by running:
+   ```bash
+   npx trigger.dev@latest deploy
+   ```
+   *Note: Ensure you add your environment variables (like `GEMINI_API_KEY` and `DATABASE_URL`) directly to the Trigger.dev Dashboard for your Prod environment.*
