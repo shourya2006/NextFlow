@@ -114,7 +114,7 @@ export default function WorkflowsGrid({ workflows = [], onWorkflowDeleted }: { w
                         onClick={(e) => {
                           e.stopPropagation();
                           setEditingId(ele.id);
-                          setEditTitle(ele.title);
+                          setEditTitle(ele.title || "");
                           setOpenDropdownId(null);
                         }}
                         className="flex items-center gap-3 px-3 py-2 text-[14px] text-zinc-200 hover:bg-[#1a1a1a] transition-colors text-left w-full mb-1"
@@ -139,7 +139,7 @@ export default function WorkflowsGrid({ workflows = [], onWorkflowDeleted }: { w
                      <input
                        autoFocus
                        type="text"
-                       value={editTitle}
+                       value={editTitle || ""}
                        onChange={(e) => setEditTitle(e.target.value)}
                        onBlur={(e) => handleRenameSubmit(e, ele.id)}
                        onClick={(e) => e.stopPropagation()}

@@ -2,8 +2,12 @@ import { Search, ChevronDown } from "lucide-react";
 
 export default function Tabs({
   hideControls = false,
+  searchQuery = "",
+  onSearch,
 }: {
   hideControls?: boolean;
+  searchQuery?: string;
+  onSearch?: (query: string) => void;
 }) {
   const tabs = ["Projects", "Apps", "Examples", "Templates"];
 
@@ -35,6 +39,8 @@ export default function Tabs({
               <input
                 type="text"
                 placeholder="Search projects..."
+                value={searchQuery || ""}
+                onChange={(e) => onSearch?.(e.target.value)}
                 className="bg-[#121212] border border-[#262626] flex h-9 w-full rounded-md py-1 pl-9 pr-3 text-[13px] text-zinc-200 placeholder:text-zinc-600 transition-colors focus:outline-none focus:border-zinc-500"
               />
             </div>

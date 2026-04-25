@@ -15,6 +15,7 @@ export default function Home() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchWorkflows = async () => {
     try {
@@ -47,11 +48,15 @@ export default function Home() {
       >
         <div className="flex flex-col w-full h-full overflow-y-auto hidden-scrollbar">
           <Hero />
-          <Tabs hideControls={workflows.length === 0 && !loading} />
+          <Tabs hideControls={workflows.length === 0 && !loading} searchQuery={searchQuery} onSearch={setSearchQuery} />
           {loading ? (
             <div className="flex-1 flex items-center justify-center text-zinc-500">Loading workflows...</div>
           ) : workflows.length > 0 ? (
-            <WorkflowsGrid workflows={workflows} onWorkflowDeleted={fetchWorkflows} />
+            workflows.filter(w => w.title.toLowerCase().includes(searchQuery.toLowerCase())).length > 0 ? (
+              <WorkflowsGrid workflows={workflows.filter(w => w.title.toLowerCase().includes(searchQuery.toLowerCase()))} onWorkflowDeleted={fetchWorkflows} />
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-zinc-500">No workflows match your search.</div>
+            )
           ) : (
             <EmptyState />
           )}

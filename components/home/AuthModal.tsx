@@ -119,7 +119,7 @@ export default function AuthModal({
                   <input
                     type="text"
                     placeholder="Enter verification code"
-                    value={code}
+                    value={code || ""}
                     onChange={(e) => setCode(e.target.value)}
                     className="w-full h-[52px] bg-[#141414] border border-[#262626] rounded-2xl px-4 text-[15px] text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
                   />
@@ -168,7 +168,7 @@ export default function AuthModal({
                   <input
                     type="email"
                     placeholder="Enter your email"
-                    value={emailAddress}
+                    value={emailAddress || ""}
                     onChange={(e) => setEmailAddress(e.target.value)}
                     className="w-full h-[52px] bg-[#141414] border border-[#262626] rounded-2xl pl-12 pr-4 text-[15px] text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
                   />
@@ -179,7 +179,7 @@ export default function AuthModal({
                   <input
                     type="password"
                     placeholder="Enter your password"
-                    value={password}
+                    value={password || ""}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full h-[52px] bg-[#141414] border border-[#262626] rounded-2xl px-4 text-[15px] text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
                   />

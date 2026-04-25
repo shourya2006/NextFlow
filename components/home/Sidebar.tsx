@@ -8,11 +8,6 @@ import {
   PanelLeft,
   LogIn,
   Ellipsis,
-  Type,
-  Image as ImageIcon,
-  Video,
-  BrainCircuit,
-  Crop,
   Frame,
   LogOut,
 } from "lucide-react";
@@ -26,7 +21,7 @@ const MAIN_LINKS = [
   },
   {
     name: "Node Editor",
-    href: "/nodes",
+    href: "/",
     icon: "https://optim-images.krea.ai/https---s-krea-ai-icons-NodeEditor-png-128.webp",
     active: true,
   },
