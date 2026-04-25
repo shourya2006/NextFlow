@@ -1,17 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Sidebar from "@/components/home/Sidebar";
 import Hero from "@/components/home/Hero";
 import Tabs from "@/components/home/Tabs";
 import WorkflowsGrid from "@/components/home/WorkflowsGrid";
 import EmptyState from "@/components/home/EmptyState";
 
+type Workflow = { id: string; title: string; updatedAt: string };
+
 export default function Home() {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [workflows, setWorkflows] = useState<
-    { id: number; title: string; date: string }[]
-  >([{ id: 1, title: "Untitled", date: "Edited 4 minutes ago" }]); // [{ id: 1, title: "Untitled", date: "Edited 4 minutes ago" }]
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchWorkflows = async () => {
+    try {
+      const res = await fetch('/api/workflows');
+      if (res.ok) {
+        const data = await res.json();
+        setWorkflows(data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchWorkflows();
+  }, []);
 
   return (
     <div className="flex w-full h-screen bg-[#111111] text-zinc-100 overflow-hidden font-sans">
@@ -24,9 +43,11 @@ export default function Home() {
       >
         <div className="flex flex-col w-full h-full overflow-y-auto hidden-scrollbar">
           <Hero />
-          <Tabs hideControls={workflows.length === 0} />
-          {workflows.length > 0 ? (
-            <WorkflowsGrid workflows={workflows} />
+          <Tabs hideControls={workflows.length === 0 && !loading} />
+          {loading ? (
+            <div className="flex-1 flex items-center justify-center text-zinc-500">Loading workflows...</div>
+          ) : workflows.length > 0 ? (
+            <WorkflowsGrid workflows={workflows} onWorkflowDeleted={fetchWorkflows} />
           ) : (
             <EmptyState />
           )}

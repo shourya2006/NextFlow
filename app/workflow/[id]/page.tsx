@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useCallback } from "react";
+import { use, useState, useCallback, useEffect } from "react";
 import {
   ReactFlow,
   Background,
@@ -51,6 +51,45 @@ export default function WorkflowEditor({
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [title, setTitle] = useState("Untitled");
+  const [loading, setLoading] = useState(true);
+
+  // Load workflow data on mount
+  useEffect(() => {
+    const fetchWorkflow = async () => {
+      try {
+        const res = await fetch(`/api/workflows/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.nodes) setNodes(data.nodes);
+          if (data.edges) setEdges(data.edges);
+          if (data.title) setTitle(data.title);
+        }
+      } catch (err) {
+        console.error("Failed to load workflow", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchWorkflow();
+  }, [id, setNodes, setEdges]);
+
+  // Auto-save when nodes, edges, or title change (with basic debounce)
+  useEffect(() => {
+    if (loading) return;
+    const timeout = setTimeout(async () => {
+      try {
+        await fetch(`/api/workflows/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nodes, edges, title }),
+        });
+      } catch (e) {
+        console.error("Failed to save workflow", e);
+      }
+    }, 1000);
+    return () => clearTimeout(timeout);
+  }, [nodes, edges, title, id, loading]);
 
   const handleAddNode = useCallback(
     (nodeType: string) => {
@@ -163,12 +202,17 @@ export default function WorkflowEditor({
       <main
         className={`relative flex-1 flex flex-col bg-[#0a0a0a] transition-all duration-300 ${isCollapsed ? "ml-[56px]" : "ml-[260px]"}`}
       >
-        <div className="absolute top-4 left-4 z-50">
-          <button className="flex items-center gap-2 bg-[#1a1a1a] hover:bg-[#262626] border border-[#262626] text-white px-3 py-1.5 rounded-xl text-sm font-medium transition-colors shadow-sm">
-            <Grip className="w-4 h-4 text-zinc-400" />
-            <span className="text-zinc-500 mx-0.5">&rsaquo;</span>
-            Untitled
-          </button>
+        <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-1.5 shadow-sm">
+          <Grip className="w-4 h-4 text-zinc-400" />
+          <span className="text-zinc-500 mx-0.5">&rsaquo;</span>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="bg-transparent border-none outline-none text-white text-sm font-medium placeholder-zinc-500"
+            style={{ width: `${Math.max(10, title.length) + 1}ch` }}
+            placeholder="Workflow title"
+          />
         </div>
 
 

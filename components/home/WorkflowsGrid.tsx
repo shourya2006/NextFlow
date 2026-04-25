@@ -5,18 +5,58 @@ import { useRouter } from "next/navigation";
 import { Plus, MoreVertical, ExternalLink, Pencil, Trash } from "lucide-react";
 
 type Workflow = {
-  id: number;
+  id: string;
   title: string;
-  date: string;
+  updatedAt: string;
 };
 
-export default function WorkflowsGrid({ workflows = [] }: { workflows?: Workflow[] }) {
+export default function WorkflowsGrid({ workflows = [], onWorkflowDeleted }: { workflows?: Workflow[], onWorkflowDeleted?: () => void }) {
   const router = useRouter();
-  const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
 
-  const toggleDropdown = (e: React.MouseEvent, id: number) => {
+  const toggleDropdown = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     setOpenDropdownId(openDropdownId === id ? null : id);
+  };
+
+  const handleCreate = async () => {
+    try {
+      const res = await fetch("/api/workflows", { method: "POST", body: JSON.stringify({ title: "Untitled Workflow" }) });
+      if (res.ok) {
+        const wf = await res.json();
+        router.push(`/workflow/${wf.id}`);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      await fetch(`/api/workflows/${id}`, { method: "DELETE" });
+      if (onWorkflowDeleted) onWorkflowDeleted();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleRenameSubmit = async (e: React.FormEvent, id: string) => {
+    e.preventDefault();
+    if (!editTitle.trim()) return;
+    try {
+      await fetch(`/api/workflows/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: editTitle })
+      });
+      setEditingId(null);
+      if (onWorkflowDeleted) onWorkflowDeleted();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (
@@ -24,7 +64,7 @@ export default function WorkflowsGrid({ workflows = [] }: { workflows?: Workflow
       <section className="pt-8">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6 gap-x-6 gap-y-10 pb-5">
           <button 
-            onClick={() => router.push(`/workflow/${Date.now()}`)}
+            onClick={handleCreate}
             className="group flex w-full flex-col items-start gap-3 text-left"
           >
             <div className="border border-[#262626] bg-[#1a1a1a] flex aspect-[2/1.33] w-full items-center justify-center rounded-md transition-all duration-200 group-hover:scale-[0.98] group-active:scale-[0.95]">
@@ -64,21 +104,55 @@ export default function WorkflowsGrid({ workflows = [] }: { workflows?: Workflow
                        <ExternalLink className="w-4 h-4" />
                        Open
                      </button>
-                     <button className="flex items-center gap-3 px-3 py-2 text-[14px] text-zinc-200 hover:bg-[#1a1a1a] transition-colors text-left w-full mb-1">
-                       <Pencil className="w-4 h-4" />
-                       Rename
-                     </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingId(ele.id);
+                          setEditTitle(ele.title);
+                          setOpenDropdownId(null);
+                        }}
+                        className="flex items-center gap-3 px-3 py-2 text-[14px] text-zinc-200 hover:bg-[#1a1a1a] transition-colors text-left w-full mb-1"
+                      >
+                        <Pencil className="w-4 h-4" />
+                        Rename
+                      </button>
                      <div className="h-[1px] bg-[#262626] w-full" />
-                     <button className="flex items-center gap-3 px-3 py-2 mt-1 text-[14px] text-[#f87171] hover:bg-[#1a1a1a] transition-colors text-left w-full">
+                     <button 
+                       onClick={(e) => handleDelete(e, ele.id)}
+                       className="flex items-center gap-3 px-3 py-2 mt-1 text-[14px] text-[#f87171] hover:bg-[#1a1a1a] transition-colors text-left w-full"
+                     >
                        <Trash className="w-4 h-4" />
                        Delete
                      </button>
                    </div>
                  )}
                </div>
-               <div className="flex flex-col gap-0.5 mt-0.5">
-                 <p className="font-medium text-white text-[14px] leading-tight">{ele.title}</p>
-                 <p className="text-[13px] text-zinc-500 font-book leading-tight">{ele.date}</p>
+               <div className="flex flex-col gap-0.5 mt-0.5 w-full">
+                 {editingId === ele.id ? (
+                   <form onSubmit={(e) => handleRenameSubmit(e, ele.id)} className="w-full">
+                     <input
+                       autoFocus
+                       type="text"
+                       value={editTitle}
+                       onChange={(e) => setEditTitle(e.target.value)}
+                       onBlur={(e) => handleRenameSubmit(e, ele.id)}
+                       onClick={(e) => e.stopPropagation()}
+                       className="bg-[#1a1a1a] border border-[#333] rounded px-2 py-0.5 text-[14px] text-white w-full outline-none focus:border-[#666]"
+                     />
+                   </form>
+                 ) : (
+                   <p 
+                     className="font-medium text-white text-[14px] leading-tight truncate w-full"
+                     onClick={(e) => {
+                       if (editingId) e.stopPropagation();
+                     }}
+                   >
+                     {ele.title}
+                   </p>
+                 )}
+                 <p className="text-[13px] text-zinc-500 font-book leading-tight">
+                   {new Date(ele.updatedAt).toLocaleDateString()}
+                 </p>
                </div>
              </div>
           ))}
