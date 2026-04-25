@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useState } from "react";
+import { usePathname } from "next/navigation";
 import AuthModal from "./AuthModal";
 import { UserButton, useUser, SignOutButton } from "@clerk/nextjs";
 import {
@@ -10,6 +11,7 @@ import {
   Ellipsis,
   Frame,
   LogOut,
+  X,
 } from "lucide-react";
 
 const MAIN_LINKS = [
@@ -51,13 +53,6 @@ const TOOLS_LINKS = [
   { name: "Extract Frame", icon: Frame },
 ];
 
-// { name: "Image", href: "/image", icon: "https://optim-images.krea.ai/https---s-krea-ai-icons-imageV4-png-128.webp" },
-//   { name: "Video", href: "/video", icon: "https://optim-images.krea.ai/https---s-krea-ai-icons-videoV2-png-128.webp" },
-//   { name: "Enhancer", href: "/enhancer", icon: "https://optim-images.krea.ai/https---s-krea-ai-icons-Enhance-png-128.webp" },
-//   { name: "Nano Banana", href: "/nano-banana", icon: "https://optim-images.krea.ai/https---s-krea-ai-icons-NanoBanana-png-128.webp" },
-//   { name: "Realtime", href: "/realtime", icon: "https://optim-images.krea.ai/https---s-krea-ai-icons-realtimeV2-png-128.webp" },
-//   { name: "Edit", href: "/edit", icon: "https://optim-images.krea.ai/https---s-krea-ai-icons-Edit-png-128.webp" },
-
 export default function Sidebar({
   isCollapsed,
   toggleCollapse,
@@ -68,84 +63,85 @@ export default function Sidebar({
   onAddNode?: (nodeType: string) => void;
 }) {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { isLoaded, isSignedIn, user } = useUser();
+  const drawerRef = useRef<HTMLDivElement>(null);
 
-  return (
+  // Close drawer on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
+        setMobileOpen(false);
+      }
+    };
+    if (mobileOpen) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [mobileOpen]);
+
+  const SidebarContent = ({ collapsed }: { collapsed: boolean }) => (
     <>
-      <div
-        className={`h-screen bg-[#000000] border-r border-[#262626] flex flex-col text-sm fixed left-0 top-0 text-zinc-300 transition-all duration-300 ${isCollapsed ? "w-[56px]" : "w-[260px]"}`}
-      >
-      {/* Header Container */}
-      <div
-        className={`p-4 flex items-center ${isCollapsed ? "justify-center" : "justify-start lg:pl-[14px]"} pb-2`}
-      >
+      {/* Header */}
+      <div className={`p-4 flex items-center ${collapsed ? "justify-center" : "justify-between"} pb-2`}>
         <button
-          onClick={toggleCollapse}
+          onClick={collapsed ? toggleCollapse : toggleCollapse}
           className="text-zinc-500 hover:text-zinc-300 hover:bg-[#1f1f1f] p-1.5 rounded-md transition-colors outline-none focus:ring-1 focus:ring-zinc-700"
         >
           <PanelLeft size={18} strokeWidth={2} />
         </button>
+        {/* Close button for mobile drawer */}
+        {!collapsed && (
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="md:hidden text-zinc-500 hover:text-zinc-300 p-1.5 rounded-md"
+          >
+            <X size={18} />
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto hidden-scrollbar flex flex-col gap-6 pt-2 pb-2">
         {/* Main Links */}
-        <div
-          className={`flex flex-col gap-[2px] ${isCollapsed ? "px-2 items-center" : "px-3"}`}
-        >
+        <div className={`flex flex-col gap-[2px] ${collapsed ? "px-2 items-center" : "px-3"}`}>
           {MAIN_LINKS.map((link) => (
             <Link
               key={link.name}
               href={link.href}
-              title={isCollapsed ? link.name : undefined}
-              className={`flex items-center rounded-md transition-colors ${isCollapsed ? "justify-center p-2 w-9 h-9" : "gap-3 px-3 py-2"} ${link.active ? "bg-[#2a2a2a] text-white shadow-none border border-transparent" : "hover:bg-[#1a1a1a] hover:text-zinc-100 hover:border-transparent border border-transparent"}`}
+              onClick={() => setMobileOpen(false)}
+              title={collapsed ? link.name : undefined}
+              className={`flex items-center rounded-md transition-colors ${collapsed ? "justify-center p-2 w-9 h-9" : "gap-3 px-3 py-2"} ${link.active ? "bg-[#2a2a2a] text-white shadow-none border border-transparent" : "hover:bg-[#1a1a1a] hover:text-zinc-100 hover:border-transparent border border-transparent"}`}
             >
-              <img
-                src={link.icon}
-                alt={link.name}
-                className="w-[18px] h-[18px] object-contain shrink-0"
-              />
-              {!isCollapsed && <span>{link.name}</span>}
+              <img src={link.icon} alt={link.name} className="w-[18px] h-[18px] object-contain shrink-0" />
+              {!collapsed && <span>{link.name}</span>}
             </Link>
           ))}
         </div>
 
         {/* Tools */}
-        <div
-          className={`flex flex-col gap-[2px] ${isCollapsed ? "px-2 items-center" : "px-3"}`}
-        >
-          {!isCollapsed && (
+        <div className={`flex flex-col gap-[2px] ${collapsed ? "px-2 items-center" : "px-3"}`}>
+          {!collapsed && (
             <div className="flex items-center justify-between px-3 py-1.5 mb-1 group cursor-pointer text-zinc-500 hover:text-zinc-300">
-              <span className="text-[11px] font-medium uppercase tracking-wider">
-                Tools
-              </span>
+              <span className="text-[11px] font-medium uppercase tracking-wider">Tools</span>
             </div>
           )}
           {TOOLS_LINKS.map((tool) => {
             const IconComponent = tool.icon;
-
             if (onAddNode) {
               return (
                 <button
                   key={tool.name}
-                  onClick={() => onAddNode(tool.name)}
-                  title={isCollapsed ? tool.name : undefined}
-                  className={`flex items-center rounded-md transition-colors hover:bg-[#1a1a1a] hover:text-zinc-100 group outline-none ${isCollapsed ? "justify-center p-2 w-9 h-9" : "justify-between px-3 py-2"}`}
+                  onClick={() => { onAddNode(tool.name); setMobileOpen(false); }}
+                  title={collapsed ? tool.name : undefined}
+                  className={`flex items-center rounded-md transition-colors hover:bg-[#1a1a1a] hover:text-zinc-100 group outline-none ${collapsed ? "justify-center p-2 w-9 h-9" : "justify-between px-3 py-2"}`}
                 >
-                  <div
-                    className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3"}`}
-                  >
+                  <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
                     {typeof IconComponent === "string" ? (
-                      <img
-                        src={IconComponent}
-                        alt={tool.name}
-                        className="w-[18px] h-[18px] object-contain shrink-0"
-                      />
+                      <img src={IconComponent} alt={tool.name} className="w-[18px] h-[18px] object-contain shrink-0" />
                     ) : (
                       <IconComponent className="w-[18px] h-[18px] shrink-0 text-zinc-400 group-hover:text-zinc-100" />
                     )}
-                    {!isCollapsed && <span>{tool.name}</span>}
+                    {!collapsed && <span>{tool.name}</span>}
                   </div>
-                  {!isCollapsed && (
+                  {!collapsed && (
                     <div className="opacity-0 group-hover:opacity-100 p-1 text-zinc-500 hover:text-white transition-opacity">
                       <Ellipsis size={16} />
                     </div>
@@ -153,26 +149,19 @@ export default function Sidebar({
                 </button>
               );
             }
-
             return (
               <div
                 key={tool.name}
-                title={isCollapsed ? tool.name : undefined}
-                className={`flex items-center rounded-md transition-colors hover:bg-[#1a1a1a] hover:text-zinc-100 group cursor-pointer ${isCollapsed ? "justify-center p-2 w-9 h-9" : "justify-between px-3 py-2"}`}
+                title={collapsed ? tool.name : undefined}
+                className={`flex items-center rounded-md transition-colors hover:bg-[#1a1a1a] hover:text-zinc-100 group cursor-pointer ${collapsed ? "justify-center p-2 w-9 h-9" : "justify-between px-3 py-2"}`}
               >
-                <div
-                  className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3"}`}
-                >
+                <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
                   {typeof IconComponent === "string" ? (
-                    <img
-                      src={IconComponent}
-                      alt={tool.name}
-                      className="w-[18px] h-[18px] object-contain shrink-0"
-                    />
+                    <img src={IconComponent} alt={tool.name} className="w-[18px] h-[18px] object-contain shrink-0" />
                   ) : (
                     <IconComponent className="w-[18px] h-[18px] shrink-0 text-zinc-400 group-hover:text-zinc-100" />
                   )}
-                  {!isCollapsed && <span>{tool.name}</span>}
+                  {!collapsed && <span>{tool.name}</span>}
                 </div>
               </div>
             );
@@ -180,22 +169,20 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* Sign In Footer */}
-      <div
-        className={`mb-4 mt-auto flex px-3 ${isCollapsed ? "justify-center px-0" : ""}`}
-      >
+      {/* Footer */}
+      <div className={`mb-4 mt-auto flex px-3 ${collapsed ? "justify-center px-0" : ""}`}>
         {isLoaded ? (
           isSignedIn ? (
-            <div className={`flex w-full items-center justify-between ${isCollapsed ? "justify-center p-0 bg-transparent border-transparent" : "px-2 py-1.5 bg-[#1a1a1a] rounded-xl border border-[#262626]"}`}>
+            <div className={`flex w-full items-center justify-between ${collapsed ? "justify-center p-0 bg-transparent border-transparent" : "px-2 py-1.5 bg-[#1a1a1a] rounded-xl border border-[#262626]"}`}>
               <div className="flex items-center min-w-0">
                 <UserButton appearance={{ elements: { userButtonAvatarBox: "w-8 h-8 shrink-0" } }} />
-                {!isCollapsed && (
+                {!collapsed && (
                   <span className="ml-3 text-[14px] font-medium text-white truncate">
                     {user.primaryEmailAddress?.emailAddress}
                   </span>
                 )}
               </div>
-              {!isCollapsed && (
+              {!collapsed && (
                 <SignOutButton>
                   <button className="p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors ml-1 shrink-0 rounded-md hover:bg-[#2a2a2a]" title="Sign Out">
                     <LogOut size={16} />
@@ -205,14 +192,10 @@ export default function Sidebar({
             </div>
           ) : (
             <button
-              onClick={() => setIsAuthModalOpen(true)}
-              className={`flex items-center justify-center bg-[#2563eb] hover:bg-[#3b82f6] text-white font-medium transition-colors shadow-sm ${
-                isCollapsed
-                  ? "w-full h-8 rounded-sm"
-                  : "w-full h-12 rounded-xl text-[14px]"
-              }`}
+              onClick={() => { setIsAuthModalOpen(true); setMobileOpen(false); }}
+              className={`flex items-center justify-center bg-[#2563eb] hover:bg-[#3b82f6] text-white font-medium transition-colors shadow-sm ${collapsed ? "w-full h-8 rounded-sm" : "w-full h-12 rounded-xl text-[14px]"}`}
             >
-              {isCollapsed ? <LogIn size={18} strokeWidth={2.5} /> : "Sign in"}
+              {collapsed ? <LogIn size={18} strokeWidth={2.5} /> : "Sign in"}
             </button>
           )
         ) : (
@@ -220,15 +203,50 @@ export default function Sidebar({
         )}
       </div>
       <style>{`
-        .hidden-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .hidden-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
+        .hidden-scrollbar::-webkit-scrollbar { display: none; }
+        .hidden-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
+    </>
+  );
+
+  return (
+    <>
+      {/* ── Desktop sidebar (md+) ── */}
+      <div
+        className={`hidden md:flex h-screen bg-[#000000] border-r border-[#262626] flex-col text-sm fixed left-0 top-0 text-zinc-300 transition-all duration-300 z-40 ${isCollapsed ? "w-[56px]" : "w-[260px]"}`}
+      >
+        <SidebarContent collapsed={isCollapsed} />
       </div>
+
+      {/* ── Mobile top bar ── */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-[#000000] border-b border-[#262626] flex items-center justify-between px-4">
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="text-zinc-400 hover:text-zinc-100 p-1.5 rounded-md"
+        >
+          <PanelLeft size={20} />
+        </button>
+        <span className="text-white font-medium text-[15px]">NextFlow</span>
+        <div className="w-8" />
+      </div>
+
+      {/* ── Mobile drawer overlay ── */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-[60] flex">
+          {/* Backdrop — fully opaque dark overlay */}
+          <div className="absolute inset-0 bg-black/80" onClick={() => setMobileOpen(false)} />
+          {/* Drawer panel */}
+          <div
+            ref={drawerRef}
+            className="relative z-10 w-[280px] min-[360px]:w-[300px] h-full bg-[#000000] border-r border-[#262626] flex flex-col text-sm text-zinc-300 shadow-2xl"
+          >
+            <SidebarContent collapsed={false} />
+          </div>
+          {/* Tap-to-close area on the right */}
+          <div className="flex-1" onClick={() => setMobileOpen(false)} />
+        </div>
+      )}
+
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
     </>
   );

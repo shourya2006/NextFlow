@@ -25,8 +25,8 @@ export default function EmptyState() {
   };
 
   return (
-    <div className="px-12 w-full pb-12">
-      <section className="pt-8">
+    <div className="px-5 sm:px-8 md:px-12 w-full pb-12">
+      <section className="pt-6 sm:pt-8">
         <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 p-6 text-center text-balance md:p-12">
           <div className="flex max-w-xs flex-col items-center gap-2 text-center">
             <div className="mb-2 flex shrink-0 items-center justify-center bg-transparent">

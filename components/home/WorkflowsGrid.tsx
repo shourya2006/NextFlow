@@ -66,9 +66,9 @@ export default function WorkflowsGrid({ workflows = [], onWorkflowDeleted }: { w
   };
 
   return (
-    <div className="px-12 pb-12 w-full" onClick={() => setOpenDropdownId(null)}>
-      <section className="pt-8">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6 gap-x-6 gap-y-10 pb-5">
+    <div className="px-5 sm:px-8 md:px-12 pb-12 w-full" onClick={() => setOpenDropdownId(null)}>
+      <section className="pt-6 sm:pt-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-4 sm:gap-x-6 gap-y-8 sm:gap-y-10 pb-5">
           <button 
             onClick={handleCreate}
             className="group flex w-full flex-col items-start gap-3 text-left"

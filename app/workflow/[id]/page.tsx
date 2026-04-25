@@ -306,34 +306,33 @@ export default function WorkflowEditor({
       />
 
       <main
-        className={`relative flex-1 flex flex-col bg-[#0a0a0a] transition-all duration-300 ${isCollapsed ? "ml-[56px]" : "ml-[260px]"}`}
+        className={`relative flex-1 flex flex-col bg-[#0a0a0a] transition-all duration-300
+          pt-14 md:pt-0
+          ml-0 ${isCollapsed ? "md:ml-[56px]" : "md:ml-[260px]"}`}
       >
-        <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-1.5 shadow-sm">
-          <Grip className="w-4 h-4 text-zinc-400" />
-          <span className="text-zinc-500 mx-0.5">&rsaquo;</span>
+        {/* Title bar */}
+        <div className="absolute top-[calc(56px+12px)] md:top-4 left-3 md:left-4 z-50 flex items-center gap-2 bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-1.5 shadow-sm max-w-[calc(100vw-24px)] md:max-w-none">
+          <Grip className="w-4 h-4 text-zinc-400 shrink-0" />
+          <span className="text-zinc-500 mx-0.5">›</span>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="bg-transparent border-none outline-none text-white text-sm font-medium placeholder-zinc-500"
-            style={{ width: `${Math.max(10, title.length) + 1}ch` }}
+            className="bg-transparent border-none outline-none text-white text-sm font-medium placeholder-zinc-500 min-w-0"
+            style={{ width: `${Math.max(8, title.length) + 1}ch` }}
             placeholder="Workflow title"
           />
         </div>
 
-
         {/* Center Screen TEXT */}
         {nodes.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-            <div className="flex flex-col items-center gap-1.5 opacity-40">
-              <p className="text-[15px] font-medium text-zinc-300">
+            <div className="flex flex-col items-center gap-1.5 opacity-40 px-4 text-center">
+              <p className="text-[14px] sm:text-[15px] font-medium text-zinc-300">
                 Add a node
               </p>
-              <p className="text-[13px] text-zinc-400">
-                Double click, right click, or press{" "}
-                <span className="inline-flex items-center justify-center bg-[#262626] rounded px-1.5 py-0.5 text-[10px] font-bold text-zinc-300 ml-1">
-                  N
-                </span>
+              <p className="text-[12px] sm:text-[13px] text-zinc-400">
+                Use the sidebar menu to add nodes
               </p>
             </div>
           </div>
