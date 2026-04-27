@@ -7,19 +7,30 @@ export async function GET() {
   try {
     const { userId } = await auth();
 
-    const defaultWorkflow = {
+    if (!userId) {
+      return NextResponse.json([]);
+    }
+
+    const personalDefault = await prisma.workflow.findUnique({
+      where: { id: `default-${userId}` },
+      select: { id: true, title: true, updatedAt: true }
+    });
+
+    const defaultWorkflow = personalDefault ? {
+      ...personalDefault,
+      id: 'default', // Keep ID as 'default' for frontend routing
+    } : {
       id: 'default',
       title: 'Default Workflow',
       updatedAt: new Date(0).toISOString()
     };
 
-    if (!userId) {
-      return NextResponse.json([]);
-    }
-
     const workflows = await prisma.workflow.findMany({
       where: {
         userId: userId,
+        NOT: {
+          id: `default-${userId}`
+        }
       },
       orderBy: { updatedAt: 'desc' },
       select: {

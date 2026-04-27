@@ -13,6 +13,19 @@ export async function GET(
     const { userId } = await auth();
     const { id } = await params;
 
+    const effectiveId = id === 'default' && userId ? `default-${userId}` : id;
+
+    const workflow = await prisma.workflow.findUnique({
+      where: { id: effectiveId }
+    });
+    
+    if (workflow) {
+      if (workflow.userId !== null && workflow.userId !== userId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      }
+      return NextResponse.json(workflow);
+    }
+
     if (id === 'default') {
       try {
         const nodesData = await fs.readFile(path.join(process.cwd(), 'data', 'nodes.json'), 'utf-8');
@@ -32,19 +45,7 @@ export async function GET(
       }
     }
 
-    const workflow = await prisma.workflow.findUnique({
-      where: { id }
-    });
-    
-    if (!workflow) {
-      return NextResponse.json({ error: "Workflow not found" }, { status: 404 });
-    }
-
-    if (workflow.userId !== null && workflow.userId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
-    
-    return NextResponse.json(workflow);
+    return NextResponse.json({ error: "Workflow not found" }, { status: 404 });
   } catch (error) {
     console.error("Failed to fetch workflow:", error);
     return NextResponse.json({ error: "Failed to fetch workflow" }, { status: 500 });
@@ -62,9 +63,7 @@ export async function PUT(
     }
     const { id } = await params;
 
-    if (id === 'default') {
-      return NextResponse.json({ error: "Cannot modify default workflow" }, { status: 403 });
-    }
+    const effectiveId = id === 'default' ? `default-${userId}` : id;
 
     const body = await request.json();
     const parsed = workflowUpdateSchema.safeParse(body);
@@ -76,7 +75,7 @@ export async function PUT(
       );
     }
 
-    const existing = await prisma.workflow.findUnique({ where: { id } });
+    const existing = await prisma.workflow.findUnique({ where: { id: effectiveId } });
     if (existing && existing.userId !== null && existing.userId !== userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
@@ -87,17 +86,17 @@ export async function PUT(
     if (parsed.data.edges !== undefined) data.edges = parsed.data.edges;
     
     const workflow = await prisma.workflow.upsert({
-      where: { id },
+      where: { id: effectiveId },
       update: {
         ...data,
-        userId: existing?.userId || userId || null,
+        userId: userId,
       },
       create: {
-        id,
-        title: parsed.data.title || "Untitled",
+        id: effectiveId,
+        title: parsed.data.title || "Default Workflow",
         nodes: parsed.data.nodes || [],
         edges: parsed.data.edges || [],
-        userId: userId || null,
+        userId: userId,
       }
     });
     
@@ -119,11 +118,9 @@ export async function DELETE(
     }
     const { id } = await params;
 
-    if (id === 'default') {
-      return NextResponse.json({ error: "Cannot delete default workflow" }, { status: 403 });
-    }
+    const effectiveId = id === 'default' ? `default-${userId}` : id;
     
-    const existing = await prisma.workflow.findUnique({ where: { id } });
+    const existing = await prisma.workflow.findUnique({ where: { id: effectiveId } });
     if (!existing) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -133,7 +130,7 @@ export async function DELETE(
     }
 
     await prisma.workflow.delete({
-      where: { id }
+      where: { id: effectiveId }
     });
     
     return NextResponse.json({ success: true });
@@ -142,3 +139,4 @@ export async function DELETE(
     return NextResponse.json({ error: "Failed to delete workflow" }, { status: 500 });
   }
 }
+

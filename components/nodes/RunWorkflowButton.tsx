@@ -2,6 +2,7 @@ import { Play, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useReactFlow, useEdges, useStore } from "@xyflow/react";
 import { useRunStore } from "@/store/runStore";
+import { useHistoryStore } from "@/store/historyStore";
 import { getConnectedComponent } from "./utils";
 
 export default function RunWorkflowButton({
@@ -16,6 +17,7 @@ export default function RunWorkflowButton({
   const nodeCount = useStore((s) => s.nodes.length);
   const [isRunning, setIsRunningLocal] = useState(false);
   const { setRunningIds, clearRunning } = useRunStore();
+  const { addRun, updateRun, updateNodeStatus } = useHistoryStore();
 
   const setRunning = (v: boolean) => {
     setIsRunningLocal(v);
@@ -39,7 +41,25 @@ export default function RunWorkflowButton({
       const allNodes = getNodes();
       const allEdges = getEdges();
       
-      const { nodes: componentNodes, edges: componentEdges } = getConnectedComponent(nodeId, allNodes, allEdges);
+      const { nodes: componentNodes, edges: componentEdges, nodeIds } = getConnectedComponent(nodeId, allNodes, allEdges);
+      
+      const runId = `run-${Date.now()}`;
+      const initialNodeStatuses: Record<string, any> = {};
+      nodeIds.forEach(id => {
+        const node = allNodes.find(n => n.id === id);
+        initialNodeStatuses[id] = { 
+          status: "running", 
+          label: node?.data?.label || id 
+        };
+      });
+
+      addRun({
+        id: runId,
+        workflowId: "current",
+        startTime: Date.now(),
+        status: "running",
+        nodeStatuses: initialNodeStatuses
+      });
       
       let currentNodes = [...componentNodes];
       const transloaditKey = process.env.NEXT_PUBLIC_TRANSLOADIT_AUTH_KEY;
@@ -180,6 +200,8 @@ export default function RunWorkflowButton({
       }
 
       if (currentNodes.length === 1 && (currentNodes[0].type === "text" || currentNodes[0].type === "image" || currentNodes[0].type === "video")) {
+        updateRun(runId, { status: "completed", endTime: Date.now() });
+        nodeIds.forEach(id => updateNodeStatus(runId, id, "success"));
         return;
       }
 
@@ -211,6 +233,17 @@ export default function RunWorkflowButton({
               return executed ? { ...node, data: executed.data } : node;
             })
           );
+
+          // Update status in history
+          executedNodes.forEach((en: any) => {
+            const status = en.data?.output?.toString().startsWith("Error") ? "failed" : "success";
+            updateNodeStatus(runId, en.id, status, status === "failed" ? en.data.output : undefined);
+          });
+
+          updateRun(runId, { 
+            status: result.success ? "completed" : "failed", 
+            endTime: Date.now() 
+          });
 
           for (const executedNode of executedNodes) {
             if (executedNode.type === "image" && executedNode.data.output && (executedNode.data.output as string).startsWith("data:")) {
@@ -260,7 +293,9 @@ export default function RunWorkflowButton({
           }
         }
 
-      } catch (error) {
+      } catch (error: any) {
+        updateRun(runId, { status: "failed", endTime: Date.now() });
+        nodeIds.forEach(id => updateNodeStatus(runId, id, "failed", error.message));
       }
     } finally {
       setRunning(false);

@@ -23,6 +23,8 @@ import LLMNode from "@/components/nodes/LLMNode";
 import CropImageNode from "@/components/nodes/CropImageNode";
 import ExtractFrameNode from "@/components/nodes/ExtractFrameNode";
 import { useSidebarStore } from "@/store/sidebarStore";
+import { useHistoryStore } from "@/store/historyStore";
+import WorkflowHistorySidebar from "@/components/workflow/WorkflowHistorySidebar";
 import FlowingEdge from "@/components/nodes/FlowingEdge";
 import RunSelectionButton from "@/components/nodes/RunSelectionButton";
 import {
@@ -31,6 +33,7 @@ import {
   Redo2,
   Download,
   Upload,
+  History,
 } from "lucide-react";
 
 type HistoryEntry = { nodes: Node[]; edges: Edge[] };
@@ -43,6 +46,7 @@ export default function WorkflowEditor({
   const resolvedParams = use(params);
   const id = resolvedParams.id;
   const { isCollapsed, toggleCollapse } = useSidebarStore();
+  const { isHistoryOpen, toggleHistory } = useHistoryStore();
 
   const nodeTypes = {
     text: TextNode,
@@ -309,9 +313,10 @@ export default function WorkflowEditor({
       />
 
       <main
-        className={`relative flex-1 flex flex-col bg-[#0a0a0a] transition-all duration-300
+        className={`relative flex-1 flex flex-col bg-[#0a0a0a]
           pt-14 md:pt-0
-          ml-0 ${isCollapsed ? "md:ml-[56px]" : "md:ml-[260px]"}`}
+          ml-0 ${isCollapsed ? "md:ml-[56px]" : "md:ml-[260px]"}
+          ${isHistoryOpen ? "md:mr-80" : "mr-0"}`}
       >
         {/* Center Screen hint */}
         {nodes.length === 0 && (
@@ -375,6 +380,21 @@ export default function WorkflowEditor({
               </div>
             </Panel>
 
+            {/* History Toggle */}
+            <Panel position="top-right" style={{ margin: 0 }}>
+              {!isHistoryOpen && (
+                <div className="mt-[calc(56px+8px)] md:mt-3 mr-3">
+                  <button 
+                    onClick={toggleHistory}
+                    className="flex items-center gap-2 bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-2 shadow-sm hover:bg-[#222] transition-colors text-zinc-400 hover:text-white"
+                  >
+                    <History className="w-4 h-4" />
+                    <span className="text-xs font-medium">History</span>
+                  </button>
+                </div>
+              )}
+            </Panel>
+
             {/* Toolbar */}
             <Panel position="bottom-center" style={{ margin: 0 }}>
               <div className="mb-5 flex items-center gap-1 p-1.5 bg-[#1f1f1f] border border-[#2a2a2a] rounded-xl shadow-xl">
@@ -403,6 +423,8 @@ export default function WorkflowEditor({
           </ReactFlow>
         </div>
       </main>
+
+      <WorkflowHistorySidebar />
     </div>
   );
 }
