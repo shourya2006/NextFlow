@@ -16,7 +16,7 @@ export default function RunWorkflowButton({
   const { getNodes, getEdges, setNodes } = useReactFlow();
   const nodeCount = useStore((s) => s.nodes.length);
   const [isRunning, setIsRunningLocal] = useState(false);
-  const { setRunningIds, clearRunning } = useRunStore();
+  const { setRunningIds, setCurrentNodeId, clearRunning } = useRunStore();
   const { addRun, updateRun, updateNodeStatus } = useHistoryStore();
 
   const setRunning = (v: boolean) => {
@@ -36,19 +36,22 @@ export default function RunWorkflowButton({
 
   const handleRun = async () => {
     if (isRunning) return;
-    setRunning(true);
+    setIsRunningLocal(true);
     try {
       const allNodes = getNodes();
       const allEdges = getEdges();
       
       const { nodes: componentNodes, edges: componentEdges, nodeIds } = getConnectedComponent(nodeId, allNodes, allEdges);
       
+      // Set all node IDs as part of the workflow run (for the "Running..." button state)
+      setRunningIds(nodeIds);
+
       const runId = `run-${Date.now()}`;
       const initialNodeStatuses: Record<string, any> = {};
       nodeIds.forEach(id => {
         const node = allNodes.find(n => n.id === id);
         initialNodeStatuses[id] = { 
-          status: "running", 
+          status: "pending", 
           label: node?.data?.label || id 
         };
       });
@@ -66,18 +69,26 @@ export default function RunWorkflowButton({
       let graphChanged = false;
 
       try {
+        // Phase 1: Client-side pre-processing (image/video uploads) — node by node
         for (let i = 0; i < currentNodes.length; i++) {
           const n = currentNodes[i];
           
           if (n.type === "text" && !edges.some(e => e.target === n.id)) {
+            setCurrentNodeId(n.id);
+            updateNodeStatus(runId, n.id, "running");
             currentNodes[i] = { ...n, data: { ...n.data, output: n.data.text } };
             graphChanged = true;
+            updateNodeStatus(runId, n.id, "success");
+            setCurrentNodeId(null);
           }
           
           if (n.type === "image" && n.data.file && !n.data.output) {
             if (!transloaditKey) {
               continue;
             }
+
+            setCurrentNodeId(n.id);
+            updateNodeStatus(runId, n.id, "running");
 
             const res = await fetch(n.data.file as string);
             const blob = await res.blob();
@@ -97,6 +108,8 @@ export default function RunWorkflowButton({
             });
             
             if (!uploadRes.ok) {
+              updateNodeStatus(runId, n.id, "failed", "Upload failed");
+              setCurrentNodeId(null);
               continue;
             }
             let uploadResult = await uploadRes.json();
@@ -127,13 +140,20 @@ export default function RunWorkflowButton({
             if (sslUrl) {
                currentNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
                graphChanged = true;
+               updateNodeStatus(runId, n.id, "success");
+            } else {
+               updateNodeStatus(runId, n.id, "failed", "No URL returned");
             }
+            setCurrentNodeId(null);
           }
 
           if (n.type === "video" && n.data.file && !n.data.output) {
             if (!transloaditKey) {
               continue
             }
+
+            setCurrentNodeId(n.id);
+            updateNodeStatus(runId, n.id, "running");
 
             const res = await fetch(n.data.file as string);
             const blob = await res.blob();
@@ -153,6 +173,8 @@ export default function RunWorkflowButton({
             });
             
             if (!uploadRes.ok) {
+              updateNodeStatus(runId, n.id, "failed", "Upload failed");
+              setCurrentNodeId(null);
               continue;
             }
             let uploadResult = await uploadRes.json();
@@ -183,7 +205,11 @@ export default function RunWorkflowButton({
             if (sslUrl) {
                currentNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
                graphChanged = true;
+               updateNodeStatus(runId, n.id, "success");
+            } else {
+               updateNodeStatus(runId, n.id, "failed", "No URL returned");
             }
+            setCurrentNodeId(null);
           }
         }
         
@@ -203,6 +229,13 @@ export default function RunWorkflowButton({
         updateRun(runId, { status: "completed", endTime: Date.now() });
         nodeIds.forEach(id => updateNodeStatus(runId, id, "success"));
         return;
+      }
+
+      // Phase 2: Server-side execution via trigger.dev
+      // Highlight the first non-processed node to indicate server work is happening
+      const firstServerNode = currentNodes.find(n => n.type !== "text" || edges.some(e => e.target === n.id));
+      if (firstServerNode) {
+        setCurrentNodeId(firstServerNode.id);
       }
 
       try {
@@ -227,28 +260,38 @@ export default function RunWorkflowButton({
         if (result.success && result.result?.executionOrder) {
           const executedNodes = result.result.executionOrder;
           
-          setNodes((prev) => 
-            prev.map(node => {
-              const executed = executedNodes.find((en: any) => en.id === node.id);
-              return executed ? { ...node, data: executed.data } : node;
-            })
-          );
+          // Phase 3: Animate through execution order one node at a time
+          for (const en of executedNodes) {
+            setCurrentNodeId(en.id);
+            
+            // Update this specific node in the React Flow graph
+            setNodes((prev) => 
+              prev.map(node => {
+                return node.id === en.id ? { ...node, data: en.data } : node;
+              })
+            );
 
-          // Update status in history
-          executedNodes.forEach((en: any) => {
             const status = en.data?.output?.toString().startsWith("Error") ? "failed" : "success";
             updateNodeStatus(runId, en.id, status, status === "failed" ? en.data.output : undefined);
-          });
+
+            // Brief pause so the user sees each node light up sequentially
+            await new Promise(resolve => setTimeout(resolve, 400));
+            setCurrentNodeId(null);
+            // Small gap before next node highlights
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
 
           updateRun(runId, { 
             status: result.success ? "completed" : "failed", 
             endTime: Date.now() 
           });
 
+          // Phase 4: Post-process image uploads (Transloadit) — node by node
           for (const executedNode of executedNodes) {
             if (executedNode.type === "image" && executedNode.data.output && (executedNode.data.output as string).startsWith("data:")) {
               if (!transloaditKey) continue;
               try {
+                setCurrentNodeId(executedNode.id);
                 const dataUrl = executedNode.data.output as string;
                 const res = await fetch(dataUrl);
                 const blob = await res.blob();
@@ -288,7 +331,10 @@ export default function RunWorkflowButton({
                     prev.map(node => node.id === executedNode.id ? { ...node, data: { ...node.data, output: sslUrl } } : node)
                   );
                 }
-              } catch (e) {}
+                setCurrentNodeId(null);
+              } catch (e) {
+                setCurrentNodeId(null);
+              }
             }
           }
         }
@@ -298,7 +344,8 @@ export default function RunWorkflowButton({
         nodeIds.forEach(id => updateNodeStatus(runId, id, "failed", error.message));
       }
     } finally {
-      setRunning(false);
+      setIsRunningLocal(false);
+      clearRunning();
     }
   };
 
@@ -322,3 +369,4 @@ export default function RunWorkflowButton({
     </button>
   );
 }
+

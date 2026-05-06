@@ -10,7 +10,7 @@ export default function RunSelectionButton() {
   const allNodes = useNodes();
   const allEdges = useEdges();
   const [isRunningLocal, setIsRunningLocal] = useState(false);
-  const { setRunningIds, clearRunning } = useRunStore();
+  const { setRunningIds, setCurrentNodeId, clearRunning } = useRunStore();
 
   const selectedNodes = allNodes.filter((n) => n.selected);
   const selectedIds = new Set(selectedNodes.map((n) => n.id));
@@ -21,15 +21,6 @@ export default function RunSelectionButton() {
 
   if (selectedNodes.length === 0) return null;
 
-  const setRunning = (v: boolean) => {
-    setIsRunningLocal(v);
-    if (v) {
-      setRunningIds(selectedNodes.map((n) => n.id));
-    } else {
-      clearRunning();
-    }
-  };
-
   const findStartNode = (nodes: Node[], edges: Edge[]): string => {
     const targets = new Set(edges.map((e) => e.target));
     const root = nodes.find((n) => !targets.has(n.id));
@@ -38,7 +29,8 @@ export default function RunSelectionButton() {
 
   const handleRunSelection = async () => {
     if (isRunningLocal) return;
-    setRunning(true);
+    setIsRunningLocal(true);
+    setRunningIds(selectedNodes.map((n) => n.id));
     try {
       const startNodeId = findStartNode(selectedNodes, selectedEdges);
 
@@ -48,6 +40,9 @@ export default function RunSelectionButton() {
         }
         return n;
       });
+
+      // Highlight the start node during the API call
+      setCurrentNodeId(startNodeId);
 
       const response = await fetch("/api/run", {
         method: "POST",
@@ -65,17 +60,27 @@ export default function RunSelectionButton() {
 
       if (result.success && result.result?.executionOrder) {
         const executedNodes: Node[] = result.result.executionOrder;
-        setNodes((prev) =>
-          prev.map((node) => {
-            const executed = executedNodes.find((en) => en.id === node.id);
-            return executed ? { ...node, data: executed.data } : node;
-          })
-        );
+        
+        // Animate through execution order one node at a time
+        for (const en of executedNodes) {
+          setCurrentNodeId(en.id);
+          
+          setNodes((prev) =>
+            prev.map((node) => {
+              return node.id === en.id ? { ...node, data: en.data } : node;
+            })
+          );
+
+          await new Promise(resolve => setTimeout(resolve, 400));
+          setCurrentNodeId(null);
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
     } catch (err) {
       console.error("Run selection failed", err);
     } finally {
-      setRunning(false);
+      setIsRunningLocal(false);
+      clearRunning();
     }
   };
 
@@ -101,3 +106,4 @@ export default function RunSelectionButton() {
     </button>
   );
 }
+

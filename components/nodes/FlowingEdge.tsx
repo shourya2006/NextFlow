@@ -19,8 +19,8 @@ export default function FlowingEdge({
   style = {},
   markerEnd,
 }: EdgeProps) {
-  const runningNodeIds = useRunStore((s) => s.runningNodeIds);
-  const isRunning = runningNodeIds.has(source) && runningNodeIds.has(target);
+  const currentNodeId = useRunStore((s) => s.currentNodeId);
+  const isRunning = currentNodeId === source || currentNodeId === target;
   const [edgePath] = getBezierPath({
     sourceX,
     sourceY,

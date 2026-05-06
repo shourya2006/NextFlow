@@ -19,8 +19,8 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
   const { setNodes } = useReactFlow();
   const edges = useEdges();
   const nodes = useNodes();
-  const runningNodeIds = useRunStore((s) => s.runningNodeIds);
-  const isRunning = runningNodeIds.has(id);
+  const currentNodeId = useRunStore((s) => s.currentNodeId);
+  const isRunning = currentNodeId === id;
 
   const promptEdge = edges.find(e => e.target === id && e.targetHandle === "prompt");
   const promptSourceNode = promptEdge ? nodes.find(n => n.id === promptEdge.source) : null;

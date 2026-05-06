@@ -6,6 +6,54 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 
+/**
+ * Resolves a URL (data: or http/https) into a Buffer.
+ * Handles base64 data URLs directly without fetch, and validates HTTP responses.
+ */
+async function resolveToBuffer(url: string): Promise<Buffer> {
+  // Handle base64 data URLs directly — don't rely on fetch() for data: protocol
+  if (url.startsWith("data:")) {
+    const match = url.match(/^data:([^;]+);base64,([\s\S]+)$/);
+    if (match) {
+      return Buffer.from(match[2], "base64");
+    }
+    throw new Error("Invalid data URL format");
+  }
+
+  // HTTP/HTTPS URL — fetch and validate
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Fetch failed with status ${res.status}: ${res.statusText}`);
+  }
+
+  const contentType = res.headers.get("content-type") || "";
+  // Reject HTML/XML error pages that aren't actual media
+  if (contentType.includes("text/html") || contentType.includes("text/xml") || contentType.includes("application/xml")) {
+    throw new Error(`URL returned non-media content type: ${contentType}`);
+  }
+
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/**
+ * Tries to resolve media from multiple sources in order.
+ * Handles the common case where data.output is an expired URL
+ * but data.file still has valid base64 data.
+ */
+async function resolveWithFallback(...sources: (string | undefined | null)[]): Promise<Buffer> {
+  let lastError: Error | null = null;
+  for (const source of sources) {
+    if (!source) continue;
+    try {
+      return await resolveToBuffer(source);
+    } catch (err: any) {
+      lastError = err;
+      // Continue to next fallback source
+    }
+  }
+  throw lastError || new Error("No valid media source found");
+}
+
 export const runWorkflow = task({
   id: "workflow-run",
   run: async (payload: any) => {
@@ -63,6 +111,10 @@ export const runWorkflow = task({
 
     for (const node of orderedNodes) {
       if (node.type === "video") {
+        // Ensure video nodes propagate their file as output if no output is set
+        if (!node.data.output && node.data.file) {
+          node.data.output = node.data.file;
+        }
         continue;
       }
 
@@ -75,6 +127,10 @@ export const runWorkflow = task({
               node.data.output = sourceNode.data.output;
             }
           }
+        }
+        // Fallback: if no output was set from upstream, use the node's own file data
+        if (!node.data.output && node.data.file) {
+          node.data.output = node.data.file;
         }
         continue;
       }
@@ -95,23 +151,25 @@ export const runWorkflow = task({
 
       if (node.type === "crop") {
         const incomingEdges = edges.filter((e: any) => e.target === node.id);
-        let imageUrl = "";
+        let sourceOutput = "";
+        let sourceFile = "";
 
         for (const edge of incomingEdges) {
           const sourceNode = orderedNodes.find((n: any) => n.id === edge.source);
           if (sourceNode) {
-            imageUrl = sourceNode.data.output || sourceNode.data.file || "";
+            sourceOutput = sourceNode.data.output || "";
+            sourceFile = sourceNode.data.file || "";
           }
         }
 
-        if (!imageUrl) {
+        if (!sourceOutput && !sourceFile) {
           node.data.output = "Error: No image input connected";
           continue;
         }
 
         try {
-          const imgRes = await fetch(imageUrl);
-          const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+          // Try output URL first, fall back to raw file data if URL expired/404
+          const imgBuffer = await resolveWithFallback(sourceOutput, sourceFile);
           const metadata = await sharp(imgBuffer).metadata();
 
           const imgWidth = metadata.width || 100;
@@ -148,18 +206,20 @@ export const runWorkflow = task({
 
       if (node.type === "frame") {
         const incomingEdges = edges.filter((e: any) => e.target === node.id);
-        let videoUrl = "";
+        let sourceOutput = "";
+        let sourceVideoUrl = "";
+        let sourceFile = "";
 
         for (const edge of incomingEdges) {
           const sourceNode = orderedNodes.find((n: any) => n.id === edge.source);
           if (sourceNode && edge.targetHandle === "url") {
-            videoUrl = sourceNode.data.output || sourceNode.data.videoUrl || "";
+            sourceOutput = sourceNode.data.output || "";
+            sourceVideoUrl = sourceNode.data.videoUrl || "";
+            sourceFile = sourceNode.data.file || "";
           }
         }
 
-        videoUrl = videoUrl || node.data.videoUrl || "";
-
-        if (!videoUrl) {
+        if (!sourceOutput && !sourceVideoUrl && !sourceFile && !node.data.videoUrl) {
           node.data.output = "Error: No video URL provided";
           continue;
         }
@@ -171,8 +231,8 @@ export const runWorkflow = task({
           const inputPath = path.join(tmpDir, `input_${node.id}_${Date.now()}.mp4`);
           const outputPath = path.join(tmpDir, `frame_${node.id}_${Date.now()}.png`);
 
-          const videoRes = await fetch(videoUrl);
-          const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+          // Try output URL first, fall back to videoUrl, then raw file data
+          const videoBuffer = await resolveWithFallback(sourceOutput, sourceVideoUrl, sourceFile, node.data.videoUrl);
           fs.writeFileSync(inputPath, videoBuffer);
 
           await new Promise<void>((resolve, reject) => {
@@ -250,14 +310,13 @@ export const runWorkflow = task({
               let contentType: string;
 
               if (imageUrl.startsWith("data:")) {
-                const match = imageUrl.match(/^data:(.*?);base64,(.*)$/);
+                const match = imageUrl.match(/^data:(.*?);base64,([\s\S]*)$/);
                 contentType = match?.[1] || "image/png";
                 base64 = match?.[2] || "";
               } else {
-                const imgRes = await fetch(imageUrl);
-                const imgBuffer = await imgRes.arrayBuffer();
-                base64 = Buffer.from(imgBuffer).toString("base64");
-                contentType = imgRes.headers.get("content-type") || "image/png";
+                const imgBuffer = await resolveToBuffer(imageUrl);
+                base64 = imgBuffer.toString("base64");
+                contentType = "image/png";
               }
 
               parts.push({
@@ -288,3 +347,4 @@ export const runWorkflow = task({
     return { success: true, executionOrder: orderedNodes };
   },
 });
+

@@ -11,8 +11,8 @@ export default function UploadImageNode({ id, data, selected }: { id: string, da
   const nodes = useNodes();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showModal, setShowModal] = useState(false);
-  const runningNodeIds = useRunStore((s) => s.runningNodeIds);
-  const isRunning = runningNodeIds.has(id);
+  const currentNodeId = useRunStore((s) => s.currentNodeId);
+  const isRunning = currentNodeId === id;
 
   const inputEdge = edges.find(e => e.target === id);
   const inputSourceNode = inputEdge ? nodes.find(n => n.id === inputEdge.source) : null;

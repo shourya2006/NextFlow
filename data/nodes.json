@@ -2,9 +2,7 @@
   {
     "id": "upload-image-1777074068580",
     "data": {
-      "file": "",
-      "label": "Upload Image",
-      "fileName": "headphone.jpeg"
+      "label": "Upload Image"
     },
     "type": "image",
     "dragging": false,
@@ -113,9 +111,7 @@
   {
     "id": "upload-video-1777074427652",
     "data": {
-      "file": "",
-      "label": "Upload Video",
-      "fileName": "file_example_MP4_480_1_5MG.mp4"
+      "label": "Upload Video"
     },
     "type": "video",
     "dragging": false,
