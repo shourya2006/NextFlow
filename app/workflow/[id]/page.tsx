@@ -9,6 +9,8 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
+  useReactFlow,
+  ReactFlowProvider,
   addEdge,
   type Node,
   type Connection,
@@ -24,6 +26,7 @@ import CropImageNode from "@/components/nodes/CropImageNode";
 import ExtractFrameNode from "@/components/nodes/ExtractFrameNode";
 import { useSidebarStore } from "@/store/sidebarStore";
 import { useHistoryStore } from "@/store/historyStore";
+import { useThemeStore } from "@/store/themeStore";
 import WorkflowHistorySidebar from "@/components/workflow/WorkflowHistorySidebar";
 import FlowingEdge from "@/components/nodes/FlowingEdge";
 import RunSelectionButton from "@/components/nodes/RunSelectionButton";
@@ -34,19 +37,20 @@ import {
   Download,
   Upload,
   History,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 type HistoryEntry = { nodes: Node[]; edges: Edge[] };
 
-export default function WorkflowEditor({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const resolvedParams = use(params);
-  const id = resolvedParams.id;
+function WorkflowEditorInner({ id }: { id: string }) {
   const { isCollapsed, toggleCollapse } = useSidebarStore();
   const { isHistoryOpen, toggleHistory } = useHistoryStore();
+  const { theme, toggleTheme } = useThemeStore();
+  const { zoomIn, zoomOut, fitView } = useReactFlow();
 
   const nodeTypes = {
     text: TextNode,
@@ -305,7 +309,7 @@ export default function WorkflowEditor({
   );
 
   return (
-    <div className="flex w-screen h-screen bg-[#0a0a0a] text-zinc-100 overflow-hidden font-sans">
+    <div className={`flex w-screen h-screen overflow-hidden font-sans ${theme === 'dark' ? 'bg-[#0a0a0a] text-zinc-100' : 'bg-[#f5f5f5] text-zinc-900'}`}>
       <Sidebar
         isCollapsed={isCollapsed}
         toggleCollapse={toggleCollapse}
@@ -313,7 +317,7 @@ export default function WorkflowEditor({
       />
 
       <main
-        className={`relative flex-1 flex flex-col bg-[#0a0a0a]
+        className={`relative flex-1 flex flex-col ${theme === 'dark' ? 'bg-[#0a0a0a]' : 'bg-[#f5f5f5]'}
           pt-14 md:pt-0
           ml-0 ${isCollapsed ? "md:ml-[56px]" : "md:ml-[260px]"}
           ${isHistoryOpen ? "md:mr-80" : "mr-0"}`}
@@ -340,18 +344,19 @@ export default function WorkflowEditor({
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             fitView
-            className="dark"
+            className={theme === 'dark' ? 'dark' : 'light'}
+            style={theme === 'light' ? { backgroundColor: '#ffffff' } : undefined}
             proOptions={{ hideAttribution: true }}
           >
-            <Background color="#222" variant={BackgroundVariant.Dots} gap={24} size={1.5} />
+            <Background color={theme === 'dark' ? '#222' : '#1a1a1a'} variant={BackgroundVariant.Dots} gap={24} size={1.5} />
             <MiniMap 
               className="hidden md:block"
               pannable
               zoomable
               style={{
-                backgroundColor: '#1a1a1a',
+                backgroundColor: theme === 'dark' ? '#1a1a1a' : '#e5e5e5',
                 borderRadius: '12px',
-                border: '1px solid #262626',
+                border: theme === 'dark' ? '1px solid #262626' : '1px solid #d4d4d4',
               }}
               nodeColor={(n) => {
                 if (n.type === 'text') return '#eab308';
@@ -359,21 +364,21 @@ export default function WorkflowEditor({
                 if (n.type === 'llm') return '#8b5cf6';
                 return '#262626';
               }}
-              maskColor="rgba(0, 0, 0, 0.4)"
-              maskStrokeColor="#333"
+              maskColor={theme === 'dark' ? 'rgba(0, 0, 0, 0.4)' : 'rgba(255, 255, 255, 0.6)'}
+              maskStrokeColor={theme === 'dark' ? '#333' : '#bbb'}
               maskStrokeWidth={2}
             />
 
             {/* Title bar */}
             <Panel position="top-left" style={{ margin: 0 }}>
-              <div className="mt-[calc(56px+8px)] md:mt-3 ml-2 md:ml-3 flex items-center gap-2 bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-1.5 shadow-sm max-w-[calc(100vw-80px)] md:max-w-none">
+              <div className={`mt-[calc(56px+8px)] md:mt-3 ml-2 md:ml-3 flex items-center gap-2 rounded-xl px-3 py-1.5 shadow-sm max-w-[calc(100vw-80px)] md:max-w-none ${theme === 'dark' ? 'bg-[#1a1a1a] border border-[#262626]' : 'bg-white border border-[#d4d4d4]'}`}>
                 <Grip className="w-4 h-4 text-zinc-400 shrink-0" />
-                <span className="text-zinc-500 mx-0.5">›</span>
+                <span className={theme === 'dark' ? 'text-zinc-500 mx-0.5' : 'text-zinc-400 mx-0.5'}>›</span>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="bg-transparent border-none outline-none text-white text-sm font-medium placeholder-zinc-500 min-w-0"
+                  className={`bg-transparent border-none outline-none text-sm font-medium min-w-0 ${theme === 'dark' ? 'text-white placeholder-zinc-500' : 'text-zinc-900 placeholder-zinc-400'}`}
                   style={{ width: `${Math.max(8, title.length) + 1}ch` }}
                   placeholder="Workflow title"
                 />
@@ -386,7 +391,7 @@ export default function WorkflowEditor({
                 <div className="mt-[calc(56px+8px)] md:mt-3 mr-3">
                   <button 
                     onClick={toggleHistory}
-                    className="flex items-center gap-2 bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-2 shadow-sm hover:bg-[#222] transition-colors text-zinc-400 hover:text-white"
+                    className={`flex items-center gap-2 rounded-xl px-3 py-2 shadow-sm transition-colors ${theme === 'dark' ? 'bg-[#1a1a1a] border border-[#262626] hover:bg-[#222] text-zinc-400 hover:text-white' : 'bg-white border border-[#d4d4d4] hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900'}`}
                   >
                     <History className="w-4 h-4" />
                     <span className="text-xs font-medium">History</span>
@@ -397,26 +402,44 @@ export default function WorkflowEditor({
 
             {/* Toolbar */}
             <Panel position="bottom-center" style={{ margin: 0 }}>
-              <div className="mb-5 flex items-center gap-1 p-1.5 bg-[#1f1f1f] border border-[#2a2a2a] rounded-xl shadow-xl">
-                <button onClick={handleUndo} title="Undo (⌘Z)" className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100">
+              <div className={`mb-5 flex items-center gap-1 p-1.5 rounded-xl shadow-xl ${theme === 'dark' ? 'bg-[#1f1f1f] border border-[#2a2a2a]' : 'bg-white border border-[#d4d4d4]'}`}>
+                <button onClick={handleUndo} title="Undo (⌘Z)" className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-[#333] text-zinc-400 hover:text-zinc-100' : 'hover:bg-zinc-200 text-zinc-500 hover:text-zinc-900'}`}>
                   <Undo2 className="w-4 h-4" />
                 </button>
-                <button onClick={handleRedo} title="Redo (⌘⇧Z)" className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100">
+                <button onClick={handleRedo} title="Redo (⌘⇧Z)" className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-[#333] text-zinc-400 hover:text-zinc-100' : 'hover:bg-zinc-200 text-zinc-500 hover:text-zinc-900'}`}>
                   <Redo2 className="w-4 h-4" />
                 </button>
 
-                <div className="w-[1px] h-6 bg-[#333] mx-0.5" />
+                <div className={`w-[1px] h-6 mx-0.5 ${theme === 'dark' ? 'bg-[#333]' : 'bg-zinc-300'}`} />
 
-                <button onClick={() => fileInputRef.current?.click()} title="Import workflow" className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100">
+                <button onClick={() => zoomIn()} title="Zoom In" className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-[#333] text-zinc-400 hover:text-zinc-100' : 'hover:bg-zinc-200 text-zinc-500 hover:text-zinc-900'}`}>
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                <button onClick={() => zoomOut()} title="Zoom Out" className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-[#333] text-zinc-400 hover:text-zinc-100' : 'hover:bg-zinc-200 text-zinc-500 hover:text-zinc-900'}`}>
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <button onClick={() => fitView({ padding: 0.2 })} title="Fit View" className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-[#333] text-zinc-400 hover:text-zinc-100' : 'hover:bg-zinc-200 text-zinc-500 hover:text-zinc-900'}`}>
+                  <Maximize2 className="w-4 h-4" />
+                </button>
+
+                <div className={`w-[1px] h-6 mx-0.5 ${theme === 'dark' ? 'bg-[#333]' : 'bg-zinc-300'}`} />
+
+                <button onClick={() => fileInputRef.current?.click()} title="Import workflow" className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-[#333] text-zinc-400 hover:text-zinc-100' : 'hover:bg-zinc-200 text-zinc-500 hover:text-zinc-900'}`}>
                   <Upload className="w-4 h-4" />
                 </button>
                 <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} className="hidden" />
-                <button onClick={handleExport} title="Export workflow" className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[#333] transition-colors text-zinc-400 hover:text-zinc-100">
+                <button onClick={handleExport} title="Export workflow" className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-[#333] text-zinc-400 hover:text-zinc-100' : 'hover:bg-zinc-200 text-zinc-500 hover:text-zinc-900'}`}>
                   <Download className="w-4 h-4" />
                 </button>
 
+                <div className={`w-[1px] h-6 mx-0.5 ${theme === 'dark' ? 'bg-[#333]' : 'bg-zinc-300'}`} />
+
+                <button onClick={toggleTheme} title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'} className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-[#333] text-zinc-400 hover:text-zinc-100' : 'hover:bg-zinc-200 text-zinc-500 hover:text-zinc-900'}`}>
+                  {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                </button>
+
                 {/* Run Selection — only visible when nodes are selected */}
-                <div className="w-[1px] h-6 bg-[#333] mx-0.5" />
+                <div className={`w-[1px] h-6 mx-0.5 ${theme === 'dark' ? 'bg-[#333]' : 'bg-zinc-300'}`} />
                 <RunSelectionButton />
               </div>
             </Panel>
@@ -426,5 +449,20 @@ export default function WorkflowEditor({
 
       <WorkflowHistorySidebar />
     </div>
+  );
+}
+
+export default function WorkflowEditor({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const resolvedParams = use(params);
+  const id = resolvedParams.id;
+
+  return (
+    <ReactFlowProvider>
+      <WorkflowEditorInner id={id} />
+    </ReactFlowProvider>
   );
 }

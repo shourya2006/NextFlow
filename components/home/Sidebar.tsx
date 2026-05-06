@@ -13,6 +13,7 @@ import {
   LogOut,
   X,
 } from "lucide-react";
+import { useThemeStore } from "@/store/themeStore";
 
 const MAIN_LINKS = [
   {
@@ -65,6 +66,7 @@ export default function Sidebar({
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { isLoaded, isSignedIn, user } = useUser();
+  const { theme } = useThemeStore();
   const drawerRef = useRef<HTMLDivElement>(null);
 
   // Close drawer on outside click
@@ -84,7 +86,7 @@ export default function Sidebar({
       <div className={`p-4 flex items-center ${collapsed ? "justify-center" : "justify-between"} pb-2`}>
         <button
           onClick={collapsed ? toggleCollapse : toggleCollapse}
-          className="text-zinc-500 hover:text-zinc-300 hover:bg-[#1f1f1f] p-1.5 rounded-md transition-colors outline-none focus:ring-1 focus:ring-zinc-700"
+          className={`p-1.5 rounded-md transition-colors outline-none focus:ring-1 ${theme === 'dark' ? 'text-zinc-500 hover:text-zinc-300 hover:bg-[#1f1f1f] focus:ring-zinc-700' : 'text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200 focus:ring-zinc-300'}`}
         >
           <PanelLeft size={18} strokeWidth={2} />
         </button>
@@ -108,7 +110,7 @@ export default function Sidebar({
               href={link.href}
               onClick={() => setMobileOpen(false)}
               title={collapsed ? link.name : undefined}
-              className={`flex items-center rounded-md transition-colors ${collapsed ? "justify-center p-2 w-9 h-9" : "gap-3 px-3 py-2"} ${link.active ? "bg-[#2a2a2a] text-white shadow-none border border-transparent" : "hover:bg-[#1a1a1a] hover:text-zinc-100 hover:border-transparent border border-transparent"}`}
+              className={`flex items-center rounded-md transition-colors ${collapsed ? "justify-center p-2 w-9 h-9" : "gap-3 px-3 py-2"} ${link.active ? (theme === 'dark' ? 'bg-[#2a2a2a] text-white' : 'bg-zinc-200 text-zinc-900') + ' shadow-none border border-transparent' : (theme === 'dark' ? 'hover:bg-[#1a1a1a] hover:text-zinc-100' : 'hover:bg-zinc-100 hover:text-zinc-800') + ' hover:border-transparent border border-transparent'}`}
             >
               <img src={link.icon} alt={link.name} className="w-[18px] h-[18px] object-contain shrink-0" />
               {!collapsed && <span>{link.name}</span>}
@@ -131,7 +133,7 @@ export default function Sidebar({
                   key={tool.name}
                   onClick={() => { onAddNode(tool.name); setMobileOpen(false); }}
                   title={collapsed ? tool.name : undefined}
-                  className={`flex items-center rounded-md transition-colors hover:bg-[#1a1a1a] hover:text-zinc-100 group outline-none ${collapsed ? "justify-center p-2 w-9 h-9" : "justify-between px-3 py-2"}`}
+                  className={`flex items-center rounded-md transition-colors group outline-none ${theme === 'dark' ? 'hover:bg-[#1a1a1a] hover:text-zinc-100' : 'hover:bg-zinc-100 hover:text-zinc-800'} ${collapsed ? "justify-center p-2 w-9 h-9" : "justify-between px-3 py-2"}`}
                 >
                   <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
                     {typeof IconComponent === "string" ? (
@@ -153,7 +155,7 @@ export default function Sidebar({
               <div
                 key={tool.name}
                 title={collapsed ? tool.name : undefined}
-                className={`flex items-center rounded-md transition-colors hover:bg-[#1a1a1a] hover:text-zinc-100 group cursor-pointer ${collapsed ? "justify-center p-2 w-9 h-9" : "justify-between px-3 py-2"}`}
+                className={`flex items-center rounded-md transition-colors group cursor-pointer ${theme === 'dark' ? 'hover:bg-[#1a1a1a] hover:text-zinc-100' : 'hover:bg-zinc-100 hover:text-zinc-800'} ${collapsed ? "justify-center p-2 w-9 h-9" : "justify-between px-3 py-2"}`}
               >
                 <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
                   {typeof IconComponent === "string" ? (
@@ -173,7 +175,7 @@ export default function Sidebar({
       <div className={`mb-4 mt-auto flex px-3 ${collapsed ? "justify-center px-0" : ""}`}>
         {isLoaded ? (
           isSignedIn ? (
-            <div className={`flex w-full items-center justify-between ${collapsed ? "justify-center p-0 bg-transparent border-transparent" : "px-2 py-1.5 bg-[#1a1a1a] rounded-xl border border-[#262626]"}`}>
+            <div className={`flex w-full items-center justify-between ${collapsed ? "justify-center p-0 bg-transparent border-transparent" : `px-2 py-1.5 rounded-xl border ${theme === 'dark' ? 'bg-[#1a1a1a] border-[#262626]' : 'bg-zinc-100 border-zinc-200'}`}`}>
               <div className="flex items-center min-w-0">
                 <UserButton appearance={{ elements: { userButtonAvatarBox: "w-8 h-8 shrink-0" } }} />
                 {!collapsed && (
@@ -184,7 +186,7 @@ export default function Sidebar({
               </div>
               {!collapsed && (
                 <SignOutButton>
-                  <button className="p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors ml-1 shrink-0 rounded-md hover:bg-[#2a2a2a]" title="Sign Out">
+                  <button className={`p-1.5 transition-colors ml-1 shrink-0 rounded-md ${theme === 'dark' ? 'text-zinc-500 hover:text-zinc-300 hover:bg-[#2a2a2a]' : 'text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200'}`} title="Sign Out">
                     <LogOut size={16} />
                   </button>
                 </SignOutButton>
@@ -193,7 +195,7 @@ export default function Sidebar({
           ) : (
             <button
               onClick={() => { setIsAuthModalOpen(true); setMobileOpen(false); }}
-              className={`flex items-center justify-center bg-[#2563eb] hover:bg-[#3b82f6] text-white font-medium transition-colors shadow-sm ${collapsed ? "w-full h-8 rounded-sm" : "w-full h-12 rounded-xl text-[14px]"}`}
+              className={`flex items-center justify-center font-medium transition-colors shadow-sm ${theme === 'dark' ? 'bg-[#2563eb] hover:bg-[#3b82f6] text-white' : 'bg-[#2563eb] hover:bg-[#3b82f6] text-white'} ${collapsed ? "w-full h-8 rounded-sm" : "w-full h-12 rounded-xl text-[14px]"}`}
             >
               {collapsed ? <LogIn size={18} strokeWidth={2.5} /> : "Sign in"}
             </button>
@@ -213,13 +215,13 @@ export default function Sidebar({
     <>
       {/* ── Desktop sidebar (md+) ── */}
       <div
-        className={`hidden md:flex h-screen bg-[#000000] border-r border-[#262626] flex-col text-sm fixed left-0 top-0 text-zinc-300 transition-all duration-300 z-40 ${isCollapsed ? "w-[56px]" : "w-[260px]"}`}
+        className={`hidden md:flex h-screen border-r flex-col text-sm fixed left-0 top-0 transition-all duration-300 z-40 ${theme === 'dark' ? 'bg-[#000000] border-[#262626] text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'} ${isCollapsed ? "w-[56px]" : "w-[260px]"}`}
       >
         <SidebarContent collapsed={isCollapsed} />
       </div>
 
       {/* ── Mobile top bar ── */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-[#000000] border-b border-[#262626] flex items-center justify-between px-4">
+      <div className={`md:hidden fixed top-0 left-0 right-0 z-40 h-14 border-b flex items-center justify-between px-4 ${theme === 'dark' ? 'bg-[#000000] border-[#262626]' : 'bg-white border-zinc-200'}`}>
         <button
           onClick={() => setMobileOpen(true)}
           className="text-zinc-400 hover:text-zinc-100 p-1.5 rounded-md"
@@ -238,7 +240,7 @@ export default function Sidebar({
           {/* Drawer panel */}
           <div
             ref={drawerRef}
-            className="relative z-10 w-[280px] min-[360px]:w-[300px] h-full bg-[#000000] border-r border-[#262626] flex flex-col text-sm text-zinc-300 shadow-2xl"
+            className={`relative z-10 w-[280px] min-[360px]:w-[300px] h-full border-r flex flex-col text-sm shadow-2xl ${theme === 'dark' ? 'bg-[#000000] border-[#262626] text-zinc-300' : 'bg-white border-zinc-200 text-zinc-600'}`}
           >
             <SidebarContent collapsed={false} />
           </div>

@@ -4,6 +4,7 @@ import { Type, Pencil, Copy } from "lucide-react";
 import RunWorkflowButton from "./RunWorkflowButton";
 import OutputModal from "./OutputModal";
 import { useRunStore } from "@/store/runStore";
+import { useNodeTheme } from "./nodeTheme";
 
 export default function TextNode({ id, data, selected }: { id: string, data: any, selected?: boolean }) {
   const [showModal, setShowModal] = useState(false);
@@ -12,6 +13,7 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
   const nodes = useNodes();
   const currentNodeId = useRunStore((s) => s.currentNodeId);
   const isRunning = currentNodeId === id;
+  const t = useNodeTheme();
 
   const textEdge = edges.find(e => e.target === id && e.targetHandle === "text");
   const textSourceNode = textEdge ? nodes.find(n => n.id === textEdge.source) : null;
@@ -43,10 +45,10 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
         <div className="text-[#eab308]">
           <Type size={16} strokeWidth={2.5} />
         </div>
-        <span className="text-[14px] font-medium text-zinc-400">Text</span>
+        <span className={`text-[14px] font-medium ${t.label}`}>Text</span>
       </div>
 
-      <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] transition-all ${selected ? 'ring-2 ring-[#eab308]' : ''} ${isRunning ? 'node-running' : ''}`}>
+      <div className={`${t.card} w-[260px] rounded-2xl shadow-xl overflow-hidden border transition-all ${selected ? 'ring-2 ring-[#eab308]' : ''} ${isRunning ? 'node-running' : ''}`}>
         
         <div className="flex items-center justify-between px-4 pt-3 pb-2 relative">
           
@@ -54,24 +56,24 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
             type="target"
             id="text"
             position={Position.Left}
-            className="w-4 h-4 bg-[#eab308] border-4 border-[#1c1c1c] rounded-full left-[-8px] top-[24px] transform-none"
+            className={`w-4 h-4 bg-[#eab308] border-4 ${t.handleBorder} rounded-full left-[-8px] top-[24px] transform-none`}
             style={{ transform: "translateY(-50%)" }}
           />
-          <span className="text-zinc-400 text-[13px] font-medium pl-1">Input</span>
+          <span className={`${t.label} text-[13px] font-medium pl-1`}>Input</span>
 
-          <span className="text-zinc-400 text-[13px] font-medium pr-1">Output</span>
+          <span className={`${t.label} text-[13px] font-medium pr-1`}>Output</span>
           
           <Handle
             type="source"
             id="text"
             position={Position.Right}
-            className="w-4 h-4 bg-[#eab308] border-4 border-[#1c1c1c] rounded-full right-[-8px] top-[24px] transform-none"
+            className={`w-4 h-4 bg-[#eab308] border-4 ${t.handleBorder} rounded-full right-[-8px] top-[24px] transform-none`}
             style={{ transform: "translateY(-50%)" }}
           />
         </div>
 
         <div className="flex items-center justify-end px-4 py-2">
-          <button className="text-zinc-500 hover:text-zinc-300 transition-colors">
+          <button className={`${t.action} transition-colors`}>
             <Copy size={14} />
           </button>
         </div>
@@ -82,7 +84,7 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
               value={displayValue}
               onChange={handleTextChange}
               disabled={isConnected}
-              className={`w-full bg-[#121212] ${isConnected ? 'text-zinc-500 cursor-not-allowed' : 'text-zinc-200'} text-[14px] rounded-xl p-3 min-h-[100px] outline-none border border-transparent focus:border-[#eab308] transition-colors resize-y [&::-webkit-resizer]:hidden`}
+              className={`w-full ${t.input} ${isConnected ? t.inputDisabled + ' cursor-not-allowed' : ''} text-[14px] rounded-xl p-3 min-h-[100px] outline-none border focus:border-[#eab308] transition-colors resize-y [&::-webkit-resizer]:hidden`}
               placeholder={isConnected ? "Value provided by connected node..." : "Write something"}
               spellCheck={false}
             />
@@ -97,11 +99,11 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
           
           {data.output && (
             <div 
-              className="mt-3 bg-[#101010] border border-[#262626] rounded-xl p-3 cursor-pointer hover:border-[#3a3a3a] transition-colors"
+              className={`mt-3 ${t.output} border rounded-xl p-3 cursor-pointer transition-colors`}
               onClick={() => setShowModal(true)}
             >
-              <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Output <span className="text-zinc-600 font-normal">(click to expand)</span></div>
-              <div className="text-zinc-300 text-[13px] line-clamp-3">{data.output}</div>
+              <div className={`text-[11px] font-bold ${t.textMuted} uppercase tracking-wider mb-1`}>Output <span className={`${t.labelMuted} font-normal`}>(click to expand)</span></div>
+              <div className={`${t.textValue} text-[13px] line-clamp-3`}>{data.output}</div>
             </div>
           )}
 

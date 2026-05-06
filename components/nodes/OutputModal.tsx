@@ -3,6 +3,7 @@
 import { X, Copy, Check } from "lucide-react";
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useThemeStore } from "@/store/themeStore";
 
 export default function OutputModal({ 
   output, 
@@ -15,6 +16,8 @@ export default function OutputModal({
 }) {
   const [copied, setCopied] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const theme = useThemeStore((s) => s.theme);
+  const d = theme === "dark";
 
   const isImage = output.startsWith("data:image");
 
@@ -38,17 +41,17 @@ export default function OutputModal({
       onClick={onClose}
     >
       <div 
-        className="bg-[#1a1a1a] border border-[#333] rounded-2xl shadow-2xl flex flex-col"
+        className={`rounded-2xl shadow-2xl flex flex-col border ${d ? 'bg-[#1a1a1a] border-[#333]' : 'bg-white border-zinc-300'}`}
         style={{ width: isImage ? "auto" : "560px", height: isImage ? "auto" : "420px", maxWidth: "90vw", maxHeight: "80vh" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#2a2a2a] shrink-0">
-          <span className="text-[13px] font-bold text-zinc-400 uppercase tracking-wider">{title}</span>
+        <div className={`flex items-center justify-between px-5 py-3 border-b shrink-0 ${d ? 'border-[#2a2a2a]' : 'border-zinc-200'}`}>
+          <span className={`text-[13px] font-bold uppercase tracking-wider ${d ? 'text-zinc-400' : 'text-zinc-500'}`}>{title}</span>
           <div className="flex items-center gap-2">
             {!isImage && (
               <button
                 onClick={handleCopy}
-                className="flex items-center gap-1.5 text-zinc-500 hover:text-zinc-300 transition-colors text-[12px] bg-[#262626] hover:bg-[#333] px-2.5 py-1.5 rounded-lg"
+                className={`flex items-center gap-1.5 transition-colors text-[12px] px-2.5 py-1.5 rounded-lg ${d ? 'text-zinc-500 hover:text-zinc-300 bg-[#262626] hover:bg-[#333]' : 'text-zinc-500 hover:text-zinc-700 bg-zinc-100 hover:bg-zinc-200'}`}
               >
                 {copied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
                 {copied ? "Copied!" : "Copy"}
@@ -56,7 +59,7 @@ export default function OutputModal({
             )}
             <button
               onClick={onClose}
-              className="text-zinc-500 hover:text-zinc-300 transition-colors p-1.5 hover:bg-[#262626] rounded-lg"
+              className={`transition-colors p-1.5 rounded-lg ${d ? 'text-zinc-500 hover:text-zinc-300 hover:bg-[#262626]' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200'}`}
             >
               <X size={16} />
             </button>
@@ -67,7 +70,7 @@ export default function OutputModal({
           {isImage ? (
             <img src={output} alt="Output" className="max-w-full max-h-[60vh] rounded-lg mx-auto" />
           ) : (
-            <div className="text-zinc-300 text-[14px] leading-relaxed whitespace-pre-wrap break-words">
+            <div className={`text-[14px] leading-relaxed whitespace-pre-wrap break-words ${d ? 'text-zinc-300' : 'text-zinc-700'}`}>
               {output}
             </div>
           )}

@@ -224,7 +224,8 @@ export const runWorkflow = task({
           continue;
         }
 
-        const timestamp = node.data.timestamp || 0;
+        let timestamp = node.data.timestamp || 0;
+        const percentage = node.data.percentage || 0;
 
         try {
           const tmpDir = os.tmpdir();
@@ -234,6 +235,18 @@ export const runWorkflow = task({
           // Try output URL first, fall back to videoUrl, then raw file data
           const videoBuffer = await resolveWithFallback(sourceOutput, sourceVideoUrl, sourceFile, node.data.videoUrl);
           fs.writeFileSync(inputPath, videoBuffer);
+
+          // If percentage is set, calculate timestamp from video duration
+          if (percentage > 0) {
+            const duration = await new Promise<number>((resolve, reject) => {
+              ffmpegLib.ffprobe(inputPath, (err: Error | null, metadata: any) => {
+                if (err) return reject(err);
+                resolve(metadata.format.duration || 0);
+              });
+            });
+            timestamp = (percentage / 100) * duration;
+            logger.info(`Percentage ${percentage}% of duration ${duration}s = ${timestamp}s`);
+          }
 
           await new Promise<void>((resolve, reject) => {
             ffmpegLib(inputPath)
