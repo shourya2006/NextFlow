@@ -1,5 +1,5 @@
 import { Handle, Position, useReactFlow, useEdges, useNodes } from "@xyflow/react";
-import { Image as ImageIcon, Upload, FileImage } from "lucide-react";
+import { Image as ImageIcon, Upload } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 import RunWorkflowButton from "./RunWorkflowButton";
 import OutputModal from "./OutputModal";
@@ -54,7 +54,7 @@ export default function UploadImageNode({ id, data, selected }: { id: string, da
 
       <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] flex flex-col transition-all ${selected ? 'ring-2 ring-[#3b82f6]' : ''} ${isRunning ? 'node-running' : ''}`}>
         
-        <div className="h-[120px] relative flex items-center justify-center border-b border-[#262626]">
+        <div className="min-h-[120px] relative flex items-center justify-center border-b border-[#262626]">
           <Handle
             type="target"
             position={Position.Left}
@@ -71,28 +71,42 @@ export default function UploadImageNode({ id, data, selected }: { id: string, da
           />
 
           {isConnected && (connectedOutput as string)?.startsWith("data:image") ? (
-            <img src={connectedOutput as string} alt="Connected" className="max-w-full max-h-full object-contain" />
+            <img src={connectedOutput as string} alt="Connected" className="w-full max-h-[200px] object-contain p-2" />
+          ) : data.file ? (
+            <div 
+              className="relative w-full cursor-pointer group/preview"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <img 
+                src={data.file} 
+                alt={data.fileName || "Preview"} 
+                className="w-full max-h-[200px] object-contain p-2" 
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover/preview:bg-black/40 transition-all duration-200 flex items-center justify-center">
+                <div className="opacity-0 group-hover/preview:opacity-100 transition-opacity duration-200 flex flex-col items-center gap-1">
+                  <Upload size={20} strokeWidth={2} className="text-white" />
+                  <span className="text-[11px] font-medium text-white">Replace</span>
+                </div>
+              </div>
+              <div className="absolute bottom-1 left-1 right-1 px-2 py-1 bg-black/60 rounded-md">
+                <span className="text-[11px] font-medium text-zinc-300 truncate block">{data.fileName}</span>
+              </div>
+            </div>
+          ) : isConnected ? (
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="flex flex-col items-center gap-2 text-zinc-500 hover:text-zinc-300 transition-colors z-0 h-[120px] justify-center"
+            >
+              <ImageIcon size={24} strokeWidth={2} className="text-[#3b82f6]" />
+              <span className="text-[13px] font-medium text-[#3b82f6]">Connected</span>
+            </button>
           ) : (
             <button 
               onClick={() => fileInputRef.current?.click()}
-              className="flex flex-col items-center gap-2 text-zinc-500 hover:text-zinc-300 transition-colors z-0"
+              className="flex flex-col items-center gap-2 text-zinc-500 hover:text-zinc-300 transition-colors z-0 h-[120px] justify-center"
             >
-              {data.fileName ? (
-                <>
-                  <FileImage size={24} strokeWidth={2} className="text-[#3b82f6]" />
-                  <span className="text-[13px] font-medium text-zinc-300 max-w-[200px] truncate px-4">{data.fileName}</span>
-                </>
-              ) : isConnected ? (
-                <>
-                  <ImageIcon size={24} strokeWidth={2} className="text-[#3b82f6]" />
-                  <span className="text-[13px] font-medium text-[#3b82f6]">Connected</span>
-                </>
-              ) : (
-                <>
-                  <Upload size={24} strokeWidth={2} />
-                  <span className="text-[13px] font-medium">Upload Image</span>
-                </>
-              )}
+              <Upload size={24} strokeWidth={2} />
+              <span className="text-[13px] font-medium">Upload Image</span>
             </button>
           )}
 

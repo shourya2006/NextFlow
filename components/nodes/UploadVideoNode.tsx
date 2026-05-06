@@ -1,5 +1,5 @@
 import { Handle, Position, useReactFlow } from "@xyflow/react";
-import { Video, Upload, FileVideo } from "lucide-react";
+import { Video, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import RunWorkflowButton from "./RunWorkflowButton";
 import OutputModal from "./OutputModal";
@@ -39,7 +39,7 @@ export default function UploadVideoNode({ id, data, selected }: { id: string, da
 
       <div className={`bg-[#1c1c1c] w-[260px] rounded-2xl shadow-xl overflow-hidden border border-[#262626] flex flex-col transition-all ${selected ? 'ring-2 ring-[#a855f7]' : ''} ${isRunning ? 'node-running' : ''}`}>
         
-        <div className="h-[120px] relative flex items-center justify-center border-b border-[#262626]">
+        <div className="min-h-[120px] relative flex items-center justify-center border-b border-[#262626]">
           <Handle
             type="target"
             position={Position.Left}
@@ -55,22 +55,34 @@ export default function UploadVideoNode({ id, data, selected }: { id: string, da
             className="hidden" 
           />
 
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="flex flex-col items-center gap-2 text-zinc-500 hover:text-zinc-300 transition-colors z-0"
-          >
-            {data.fileName ? (
-              <>
-                <FileVideo size={24} strokeWidth={2} className="text-[#a855f7]" />
-                <span className="text-[13px] font-medium text-zinc-300 max-w-[200px] truncate px-4">{data.fileName}</span>
-              </>
-            ) : (
-              <>
-                <Upload size={24} strokeWidth={2} />
-                <span className="text-[13px] font-medium">Upload Video</span>
-              </>
-            )}
-          </button>
+          {data.file ? (
+            <div className="relative w-full group/preview">
+              <video 
+                src={data.file} 
+                controls 
+                className="w-full max-h-[200px] object-contain bg-black"
+                style={{ display: 'block' }}
+              />
+              <div 
+                className="absolute top-2 right-2 opacity-0 group-hover/preview:opacity-100 transition-opacity duration-200 cursor-pointer bg-black/60 hover:bg-black/80 rounded-lg px-2 py-1 flex items-center gap-1 z-20"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload size={14} strokeWidth={2} className="text-white" />
+                <span className="text-[11px] font-medium text-white">Replace</span>
+              </div>
+              <div className="absolute bottom-1 left-1 right-1 px-2 py-1 bg-black/60 rounded-md pointer-events-none">
+                <span className="text-[11px] font-medium text-zinc-300 truncate block">{data.fileName}</span>
+              </div>
+            </div>
+          ) : (
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="flex flex-col items-center gap-2 text-zinc-500 hover:text-zinc-300 transition-colors z-0 h-[120px] justify-center"
+            >
+              <Upload size={24} strokeWidth={2} />
+              <span className="text-[13px] font-medium">Upload Video</span>
+            </button>
+          )}
 
           <Handle
             type="source"
