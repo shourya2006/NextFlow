@@ -4,6 +4,7 @@ import { useReactFlow, useEdges, useStore } from "@xyflow/react";
 import { useRunStore } from "@/store/runStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { getConnectedComponent } from "./utils";
+import type { Node, Edge } from "@xyflow/react";
 
 export default function RunWorkflowButton({
   nodeId,
@@ -22,20 +23,59 @@ export default function RunWorkflowButton({
   const { addRun, updateRun, addNodeRun, updateNodeRun, currentWorkflowId } = useHistoryStore();
 
   const isRoot = !edges.some((e) => e.target === nodeId);
+  const allNodes = getNodes();
+  const allEdges = getEdges();
 
-  if (!isRoot) return null;
+  // Detect multi-selection
+  const selectedNodes = allNodes.filter((n) => n.selected);
+  const isMultipleSelected = selectedNodes.length > 1;
+  // Only show partial-workflow button on the first selected node to avoid duplicates
+  const isFirstSelected = isMultipleSelected && selectedNodes[0]?.id === nodeId;
 
-  const handleRun = async () => {
+  // If multiple nodes are selected and this node is NOT the first, hide entirely
+  if (isMultipleSelected && !isFirstSelected) {
+    return null;
+  }
+
+  const handleRun = async (mode: "partial" | "node" | "workflow") => {
     if (isRunningLocal) return;
     setIsRunningLocal(true);
     let runId = `run-${Date.now()}`; // Fallback local ID
 
     try {
-      const allNodes = getNodes();
-      const allEdges = getEdges();
-      
-      const { nodes: componentNodes, edges: componentEdges, nodeIds } = getConnectedComponent(nodeId, allNodes, allEdges);
-      
+      let currentNodes: Node[] = [];
+      let componentEdges: Edge[] = [];
+      let nodeIds: string[] = [];
+      let startNodeId = nodeId;
+
+      if (mode === "partial") {
+        // Run only the selected nodes
+        const selectedIds = new Set(selectedNodes.map((n) => n.id));
+        currentNodes = [...selectedNodes];
+        componentEdges = allEdges.filter(
+          (e) => selectedIds.has(e.source) && selectedIds.has(e.target)
+        );
+        nodeIds = selectedNodes.map((n) => n.id);
+
+        const targets = new Set(componentEdges.map((e) => e.target));
+        const root = currentNodes.find((n) => !targets.has(n.id));
+        startNodeId = root?.id ?? currentNodes[0].id;
+      } else if (mode === "node") {
+        // Run just this single node
+        const node = allNodes.find((n) => n.id === nodeId);
+        if (node) currentNodes = [node];
+        componentEdges = [];
+        nodeIds = [nodeId];
+        startNodeId = nodeId;
+      } else {
+        // Run entire connected workflow from this root
+        const comp = getConnectedComponent(nodeId, allNodes, allEdges);
+        currentNodes = [...comp.nodes];
+        componentEdges = comp.edges;
+        nodeIds = comp.nodeIds;
+        startNodeId = nodeId;
+      }
+
       // Set all node IDs as part of the workflow run (for the "Running..." button state)
       setRunningIds(nodeIds);
 
@@ -60,12 +100,11 @@ export default function RunWorkflowButton({
         id: runId,
         workflowId: currentWorkflowId || "current",
         startTime: Date.now(),
-        startedAt: Date.now(), // Store new field
+        startedAt: Date.now(),
         status: "running",
         nodeRuns: [],
       } as any);
-      
-      let currentNodes = [...componentNodes];
+
       const transloaditKey = process.env.NEXT_PUBLIC_TRANSLOADIT_AUTH_KEY;
       let graphChanged = false;
 
@@ -102,7 +141,7 @@ export default function RunWorkflowButton({
       const trackNodeEnd = async (nId: string, startedAt: number, status: "success" | "failed", outputSummary?: string, error?: string) => {
         const endedAt = Date.now();
         const durationMs = endedAt - startedAt;
-        
+
         // Truncate output summary if too long
         const truncatedSummary = outputSummary ? (outputSummary.length > 200 ? outputSummary.substring(0, 200) + "..." : outputSummary) : undefined;
 
@@ -128,10 +167,65 @@ export default function RunWorkflowButton({
         }).catch(console.error);
       };
 
+      let pollInterval: NodeJS.Timeout | null = null;
+      let isPolling = true;
+
+      const syncFromDb = async () => {
+        try {
+          const res = await fetch(`/api/runs/${runId}`);
+          if (!res.ok) return;
+          const runData = await res.json();
+          if (!runData.nodeRuns) return;
+
+          for (const nr of runData.nodeRuns) {
+            const existingRun = useHistoryStore.getState().runs.find((r) => r.id === runId);
+            const existingNodeRun = existingRun?.nodeRuns?.find((enr: any) => enr.nodeId === nr.nodeId);
+
+            if (!existingNodeRun) {
+              addNodeRun(runId, {
+                nodeId: nr.nodeId,
+                label: nr.label,
+                type: nr.type,
+                status: nr.status,
+                startedAt: new Date(nr.startedAt).getTime(),
+                executionOrder: nr.executionOrder,
+                ...(nr.endedAt ? { endedAt: new Date(nr.endedAt).getTime() } : {}),
+                ...(nr.durationMs ? { durationMs: nr.durationMs } : {}),
+                ...(nr.outputSummary ? { outputSummary: nr.outputSummary } : {}),
+                ...(nr.error ? { error: nr.error } : {}),
+              });
+            } else if (existingNodeRun.status !== nr.status) {
+              // Don't let stale DB "running" overwrite a local terminal state
+              const isTerminal = existingNodeRun.status === "success" || existingNodeRun.status === "failed";
+              if (isTerminal && nr.status === "running") continue;
+
+              updateNodeRun(runId, nr.nodeId, {
+                status: nr.status,
+                ...(nr.endedAt ? { endedAt: new Date(nr.endedAt).getTime() } : {}),
+                ...(nr.durationMs ? { durationMs: nr.durationMs } : {}),
+                ...(nr.outputSummary ? { outputSummary: nr.outputSummary } : {}),
+                ...(nr.error ? { error: nr.error } : {}),
+              });
+            }
+          }
+
+          if (isPolling) {
+            const currentHistoryRun = useHistoryStore.getState().runs.find((r) => r.id === runId);
+            const activeIds =
+              currentHistoryRun?.nodeRuns
+                ?.filter((enr: any) => enr.status === "running")
+                .map((enr: any) => enr.nodeId) || [];
+            useRunStore.getState().setActiveNodeIds(activeIds);
+          }
+        } catch (e) {}
+      };
+
+      pollInterval = setInterval(syncFromDb, 600);
+
       try {
         // Phase 1: Client-side pre-processing (image/video uploads) — run in parallel
         const phase1Promises = currentNodes.map(async (n, i) => {
-          if (n.type === "text" && !edges.some(e => e.target === n.id)) {
+          if (n.type === "text" && !componentEdges.some(e => e.target === n.id)) {
             addActiveNodeId(n.id);
             const startedAt = await trackNodeStart(n);
             currentNodes[i] = { ...n, data: { ...n.data, output: n.data.text } };
@@ -139,7 +233,7 @@ export default function RunWorkflowButton({
             await trackNodeEnd(n.id, startedAt, "success", n.data.text as string | undefined);
             removeActiveNodeId(n.id);
           }
-          
+
           if (n.type === "image" && n.data.file && !n.data.output) {
             if (!transloaditKey) return;
             addActiveNodeId(n.id);
@@ -148,19 +242,19 @@ export default function RunWorkflowButton({
             try {
               const res = await fetch(n.data.file as string);
               const blob = await res.blob();
-              
+
               const formData = new FormData();
               formData.append("params", JSON.stringify({
                 auth: { key: transloaditKey },
                 steps: { resize: { robot: "/image/resize" } }
               }));
               formData.append("file", blob, (n.data.fileName as string) || "upload.png");
-              
+
               const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
                 method: "POST",
                 body: formData
               });
-              
+
               if (!uploadRes.ok) {
                 await trackNodeEnd(n.id, startedAt, "failed", undefined, "Upload failed");
                 removeActiveNodeId(n.id);
@@ -177,14 +271,14 @@ export default function RunWorkflowButton({
                   attempts++;
                 }
               }
-              
+
               let sslUrl = uploadResult?.results?.resize?.[0]?.ssl_url;
               if (!sslUrl) sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
               if (!sslUrl) {
                 const resultsKeys = Object.keys(uploadResult?.results || {});
                 if (resultsKeys.length > 0) sslUrl = uploadResult.results[resultsKeys[0]]?.[0]?.ssl_url;
               }
-              
+
               if (sslUrl) {
                 currentNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
                 graphChanged = true;
@@ -206,19 +300,19 @@ export default function RunWorkflowButton({
             try {
               const res = await fetch(n.data.file as string);
               const blob = await res.blob();
-              
+
               const formData = new FormData();
               formData.append("params", JSON.stringify({
                 auth: { key: transloaditKey },
                 steps: { encode: { robot: "/video/encode", preset: "iphone-high" } }
               }));
               formData.append("file", blob, (n.data.fileName as string) || "upload.mp4");
-              
+
               const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
                 method: "POST",
                 body: formData
               });
-              
+
               if (!uploadRes.ok) {
                 await trackNodeEnd(n.id, startedAt, "failed", undefined, "Upload failed");
                 removeActiveNodeId(n.id);
@@ -235,14 +329,14 @@ export default function RunWorkflowButton({
                   attempts++;
                 }
               }
-              
+
               let sslUrl = uploadResult?.results?.encode?.[0]?.ssl_url;
               if (!sslUrl) sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
               if (!sslUrl) {
                 const resultsKeys = Object.keys(uploadResult?.results || {});
                 if (resultsKeys.length > 0) sslUrl = uploadResult.results[resultsKeys[0]]?.[0]?.ssl_url;
               }
-              
+
               if (sslUrl) {
                 currentNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
                 graphChanged = true;
@@ -256,23 +350,25 @@ export default function RunWorkflowButton({
             removeActiveNodeId(n.id);
           }
         });
-        
+
         await Promise.all(phase1Promises);
-        
+
         if (graphChanged) {
-          setNodes((prev) => 
+          setNodes((prev) =>
             prev.map(node => {
               const updated = currentNodes.find(un => un.id === node.id);
               return updated ? { ...node, data: updated.data } : node;
             })
           );
         }
-        
+
       } catch (e) {
         console.error("Error during client preprocessing:", e);
       }
 
       if (currentNodes.length === 1 && (currentNodes[0].type === "text" || currentNodes[0].type === "image" || currentNodes[0].type === "video")) {
+        isPolling = false;
+        if (pollInterval) clearInterval(pollInterval);
         const endedAt = Date.now();
         updateRun(runId, { status: "completed", endedAt });
         fetch(`/api/runs/${runId}`, {
@@ -283,60 +379,6 @@ export default function RunWorkflowButton({
         return;
       }
 
-      // Phase 2: Server-side execution via trigger.dev
-      // Poll the DB concurrently to show real-time animation + history updates
-      let pollInterval: NodeJS.Timeout | null = null;
-      let isPolling = true;
-      
-      const syncFromDb = async () => {
-        try {
-          const res = await fetch(`/api/runs/${runId}`);
-          if (!res.ok) return;
-          const runData = await res.json();
-          if (!runData.nodeRuns) return;
-          
-          const runningIds: string[] = [];
-          for (const nr of runData.nodeRuns) {
-            // Update history sidebar
-            const existingRun = useHistoryStore.getState().runs.find(r => r.id === runId);
-            const existingNodeRun = existingRun?.nodeRuns?.find((enr: any) => enr.nodeId === nr.nodeId);
-            
-            if (!existingNodeRun) {
-              addNodeRun(runId, {
-                nodeId: nr.nodeId,
-                label: nr.label,
-                type: nr.type,
-                status: nr.status,
-                startedAt: new Date(nr.startedAt).getTime(),
-                executionOrder: nr.executionOrder,
-                ...(nr.endedAt ? { endedAt: new Date(nr.endedAt).getTime() } : {}),
-                ...(nr.durationMs ? { durationMs: nr.durationMs } : {}),
-                ...(nr.outputSummary ? { outputSummary: nr.outputSummary } : {}),
-                ...(nr.error ? { error: nr.error } : {}),
-              });
-            } else if (existingNodeRun.status !== nr.status) {
-              updateNodeRun(runId, nr.nodeId, {
-                status: nr.status,
-                ...(nr.endedAt ? { endedAt: new Date(nr.endedAt).getTime() } : {}),
-                ...(nr.durationMs ? { durationMs: nr.durationMs } : {}),
-                ...(nr.outputSummary ? { outputSummary: nr.outputSummary } : {}),
-                ...(nr.error ? { error: nr.error } : {}),
-              });
-            }
-            
-            if (nr.status === "running") {
-              runningIds.push(nr.nodeId);
-            }
-          }
-          if (isPolling) {
-            useRunStore.getState().setActiveNodeIds(runningIds);
-          }
-        } catch (e) {}
-      };
-      
-      // Start polling immediately
-      pollInterval = setInterval(syncFromDb, 600);
-
       try {
         // This blocks for the full execution duration (10-30s)
         const response = await fetch("/api/run", {
@@ -344,7 +386,7 @@ export default function RunWorkflowButton({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             runId,
-            startNodeId: nodeId,
+            startNodeId,
             nodes: currentNodes,
             edges: componentEdges,
           }),
@@ -353,7 +395,7 @@ export default function RunWorkflowButton({
         // Stop polling
         isPolling = false;
         if (pollInterval) clearInterval(pollInterval);
-        
+
         // Final sync to catch last completed nodes
         await syncFromDb();
         useRunStore.getState().setActiveNodeIds([]);
@@ -363,13 +405,13 @@ export default function RunWorkflowButton({
         }
 
         const result = await response.json();
-        
+
         if (result.success && result.result?.executionOrder) {
           const executedNodes = result.result.executionOrder;
-          
+
           // Apply final node data to canvas
           for (const en of executedNodes) {
-            setNodes((prev) => 
+            setNodes((prev) =>
               prev.map(node => node.id === en.id ? { ...node, data: en.data } : node)
             );
           }
@@ -424,7 +466,7 @@ export default function RunWorkflowButton({
                   }
 
                   if (sslUrl) {
-                    setNodes((prev) => 
+                    setNodes((prev) =>
                       prev.map(node => node.id === executedNode.id ? { ...node, data: { ...node.data, output: sslUrl } } : node)
                     );
                   }
@@ -454,23 +496,80 @@ export default function RunWorkflowButton({
     }
   };
 
+  // ── Multi-select: show one "Run partial workflow" button on first selected node ──
+  if (isFirstSelected) {
+    return (
+      <div
+        className={`absolute right-[calc(100%+16px)] top-[10px] flex items-center gap-2 z-50 ${
+          selected ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+      >
+        <button
+          onClick={() => handleRun("partial")}
+          disabled={isRunning}
+          className={`flex items-center gap-2 ${
+            isRunning ? "bg-[#f59e0b]" : "bg-[#3b82f6] hover:bg-[#2563eb]"
+          } text-white px-3 py-1.5 rounded-xl text-[13px] font-medium transition-all duration-200 shadow-lg whitespace-nowrap ${
+            isRunning ? "cursor-not-allowed" : ""
+          }`}
+        >
+          {isRunning ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Play className="w-3.5 h-3.5 fill-white" />
+          )}
+          {isRunning ? "Running..." : "Run partial workflow"}
+        </button>
+      </div>
+    );
+  }
+
+  // ── Single-select rendering ──
   return (
-    <button
-      onClick={handleRun}
-      disabled={isRunning}
-      className={`absolute right-[calc(100%+16px)] top-[10px] flex items-center gap-2 ${isRunning ? 'bg-[#f59e0b]' : 'bg-[#3b82f6] hover:bg-[#2563eb]'} text-white px-3 py-1.5 rounded-xl text-[13px] font-medium transition-all duration-200 shadow-lg z-50 whitespace-nowrap ${selected ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"} ${isRunning ? 'cursor-not-allowed' : ''}`}
+    <div
+      className={`absolute right-[calc(100%+16px)] top-[10px] flex flex-col items-end gap-2 z-50 ${
+        selected ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+      }`}
     >
-      {isRunning ? (
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-      ) : (
-        <Play className="w-3.5 h-3.5 fill-white" />
+      {/* Root nodes get the "Run workflow" button */}
+      {isRoot && (
+        <button
+          onClick={() => handleRun("workflow")}
+          disabled={isRunning}
+          className={`flex items-center gap-2 ${
+            isRunning ? "bg-[#f59e0b]" : "bg-[#3b82f6] hover:bg-[#2563eb]"
+          } text-white px-3 py-1.5 rounded-xl text-[13px] font-medium transition-all duration-200 shadow-lg whitespace-nowrap ${
+            isRunning ? "cursor-not-allowed" : ""
+          }`}
+        >
+          {isRunning ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Play className="w-3.5 h-3.5 fill-white" />
+          )}
+          {isRunning ? "Running..." : "Run workflow"}
+        </button>
       )}
-      {isRunning
-        ? "Running..."
-        : nodeCount === 1 ||
-          getNodes().find((n) => n.id === nodeId)?.type === "llm"
-          ? "Run node"
-          : "Run workflow"}
-    </button>
+
+      {/* Every node gets the "Run node" button */}
+      <button
+        onClick={() => handleRun("node")}
+        disabled={isRunning}
+        className={`flex items-center gap-2 ${
+          isRunning
+            ? "bg-[#f59e0b]"
+            : "bg-zinc-700 hover:bg-zinc-600 border border-zinc-600"
+        } text-white px-3 py-1.5 rounded-xl text-[13px] font-medium transition-all duration-200 shadow-lg whitespace-nowrap ${
+          isRunning ? "cursor-not-allowed" : ""
+        }`}
+      >
+        {isRunning ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <Play className="w-3.5 h-3.5 fill-white" />
+        )}
+        {isRunning ? "Running..." : "Run node"}
+      </button>
+    </div>
   );
 }

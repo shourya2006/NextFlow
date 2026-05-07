@@ -29,7 +29,7 @@ import { useHistoryStore } from "@/store/historyStore";
 import { useThemeStore } from "@/store/themeStore";
 import WorkflowHistorySidebar from "@/components/workflow/WorkflowHistorySidebar";
 import FlowingEdge from "@/components/nodes/FlowingEdge";
-import RunSelectionButton from "@/components/nodes/RunSelectionButton";
+
 import {
   Grip,
   Undo2,
@@ -444,9 +444,7 @@ function WorkflowEditorInner({ id }: { id: string }) {
                   {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                 </button>
 
-                {/* Run Selection — only visible when nodes are selected */}
-                <div className={`w-[1px] h-6 mx-0.5 ${theme === 'dark' ? 'bg-[#333]' : 'bg-zinc-300'}`} />
-                <RunSelectionButton />
+
               </div>
             </Panel>
           </ReactFlow>

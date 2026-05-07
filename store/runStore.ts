@@ -14,7 +14,14 @@ export const useRunStore = create<RunStore>((set) => ({
   runningNodeIds: new Set(),
   activeNodeIds: new Set(),
   setRunningIds: (ids) => set({ runningNodeIds: new Set(ids) }),
-  setActiveNodeIds: (ids) => set({ activeNodeIds: new Set(ids) }),
+  setActiveNodeIds: (ids) => set((state) => {
+    const current = state.activeNodeIds;
+    // Skip update if the set contents are identical — avoids re-render + animation restart
+    if (current.size === ids.length && ids.every((id) => current.has(id))) {
+      return state;
+    }
+    return { activeNodeIds: new Set(ids) };
+  }),
   addActiveNodeId: (id) => set((state) => {
     const next = new Set(state.activeNodeIds);
     next.add(id);
