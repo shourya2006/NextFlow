@@ -48,7 +48,7 @@ type HistoryEntry = { nodes: Node[]; edges: Edge[] };
 
 function WorkflowEditorInner({ id }: { id: string }) {
   const { isCollapsed, toggleCollapse } = useSidebarStore();
-  const { isHistoryOpen, toggleHistory } = useHistoryStore();
+  const { isHistoryOpen, toggleHistory, loadRuns, setCurrentWorkflowId } = useHistoryStore();
   const { theme, toggleTheme } = useThemeStore();
   const { zoomIn, zoomOut, fitView } = useReactFlow();
 
@@ -190,6 +190,12 @@ function WorkflowEditorInner({ id }: { id: string }) {
     };
     fetchWorkflow();
   }, [id, setNodes, setEdges]);
+
+  // Load history runs
+  useEffect(() => {
+    setCurrentWorkflowId(id);
+    loadRuns(id);
+  }, [id, setCurrentWorkflowId, loadRuns]);
 
   // Auto-save when nodes, edges, or title change (with basic debounce)
   useEffect(() => {

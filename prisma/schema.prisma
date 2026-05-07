@@ -15,4 +15,38 @@ model Workflow {
   edges     Json     @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  runs      WorkflowRun[]
+}
+
+model WorkflowRun {
+  id         String    @id @default(cuid())
+  workflowId String
+  workflow   Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  userId     String?
+  status     String    @default("running") // running | completed | failed
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+  durationMs Int?
+  nodeRuns   NodeRun[]
+
+  @@index([workflowId])
+  @@index([userId])
+}
+
+model NodeRun {
+  id             String      @id @default(cuid())
+  runId          String
+  run            WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  nodeId         String      // React Flow node ID
+  label          String
+  type           String      // text | image | video | llm | crop | frame
+  status         String      @default("running") // running | success | failed
+  startedAt      DateTime    @default(now())
+  endedAt        DateTime?
+  durationMs     Int?
+  outputSummary  String?     // First ~200 chars of output
+  error          String?
+  executionOrder Int         // The order this node ran in (0-based)
+
+  @@index([runId])
 }

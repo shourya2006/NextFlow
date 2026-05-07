@@ -17,18 +17,7 @@ export default function RunWorkflowButton({
   const nodeCount = useStore((s) => s.nodes.length);
   const [isRunning, setIsRunningLocal] = useState(false);
   const { setRunningIds, setCurrentNodeId, clearRunning } = useRunStore();
-  const { addRun, updateRun, updateNodeStatus } = useHistoryStore();
-
-  const setRunning = (v: boolean) => {
-    setIsRunningLocal(v);
-    const { nodes: componentNodes, nodeIds } = getConnectedComponent(nodeId, getNodes(), getEdges());
-    
-    if (v) {
-      setRunningIds(nodeIds);
-    } else {
-      clearRunning();
-    }
-  };
+  const { addRun, updateRun, addNodeRun, updateNodeRun, currentWorkflowId } = useHistoryStore();
 
   const isRoot = !edges.some((e) => e.target === nodeId);
 
@@ -37,6 +26,8 @@ export default function RunWorkflowButton({
   const handleRun = async () => {
     if (isRunning) return;
     setIsRunningLocal(true);
+    let runId = `run-${Date.now()}`; // Fallback local ID
+
     try {
       const allNodes = getNodes();
       const allEdges = getEdges();
@@ -46,27 +37,94 @@ export default function RunWorkflowButton({
       // Set all node IDs as part of the workflow run (for the "Running..." button state)
       setRunningIds(nodeIds);
 
-      const runId = `run-${Date.now()}`;
-      const initialNodeStatuses: Record<string, any> = {};
-      nodeIds.forEach(id => {
-        const node = allNodes.find(n => n.id === id);
-        initialNodeStatuses[id] = { 
-          status: "pending", 
-          label: node?.data?.label || id 
-        };
-      });
+      // --- CREATE DB RUN ---
+      if (currentWorkflowId) {
+        try {
+          const res = await fetch("/api/runs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ workflowId: currentWorkflowId }),
+          });
+          if (res.ok) {
+            const dbRun = await res.json();
+            runId = dbRun.id;
+          }
+        } catch (e) {
+          console.error("Failed to create DB run", e);
+        }
+      }
 
       addRun({
         id: runId,
-        workflowId: "current",
+        workflowId: currentWorkflowId || "current",
         startTime: Date.now(),
+        startedAt: Date.now(), // Store new field
         status: "running",
-        nodeStatuses: initialNodeStatuses
-      });
+        nodeRuns: [],
+      } as any);
       
       let currentNodes = [...componentNodes];
       const transloaditKey = process.env.NEXT_PUBLIC_TRANSLOADIT_AUTH_KEY;
       let graphChanged = false;
+
+      // Helper to handle node execution tracking
+      let executionOrderCounter = 0;
+
+      const trackNodeStart = async (n: any) => {
+        const startedAt = Date.now();
+        const order = executionOrderCounter++;
+        addNodeRun(runId, {
+          nodeId: n.id,
+          label: n.data?.label || n.id,
+          type: n.type || "unknown",
+          status: "running",
+          startedAt,
+          executionOrder: order,
+        });
+
+        // Async DB tracking (non-blocking)
+        fetch(`/api/runs/${runId}/nodes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nodeId: n.id,
+            label: n.data?.label || n.id,
+            type: n.type || "unknown",
+            executionOrder: order,
+          }),
+        }).catch(console.error);
+
+        return startedAt;
+      };
+
+      const trackNodeEnd = async (nId: string, startedAt: number, status: "success" | "failed", outputSummary?: string, error?: string) => {
+        const endedAt = Date.now();
+        const durationMs = endedAt - startedAt;
+        
+        // Truncate output summary if too long
+        const truncatedSummary = outputSummary ? (outputSummary.length > 200 ? outputSummary.substring(0, 200) + "..." : outputSummary) : undefined;
+
+        updateNodeRun(runId, nId, {
+          status,
+          endedAt,
+          durationMs,
+          outputSummary: truncatedSummary,
+          error,
+        });
+
+        fetch(`/api/runs/${runId}/nodes`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nodeId: nId,
+            status,
+            endedAt,
+            durationMs,
+            outputSummary: truncatedSummary,
+            error,
+          }),
+        }).catch(console.error);
+      };
 
       try {
         // Phase 1: Client-side pre-processing (image/video uploads) — node by node
@@ -75,139 +133,125 @@ export default function RunWorkflowButton({
           
           if (n.type === "text" && !edges.some(e => e.target === n.id)) {
             setCurrentNodeId(n.id);
-            updateNodeStatus(runId, n.id, "running");
+            const startedAt = await trackNodeStart(n);
             currentNodes[i] = { ...n, data: { ...n.data, output: n.data.text } };
             graphChanged = true;
-            updateNodeStatus(runId, n.id, "success");
+            await trackNodeEnd(n.id, startedAt, "success", n.data.text as string | undefined);
             setCurrentNodeId(null);
           }
           
           if (n.type === "image" && n.data.file && !n.data.output) {
-            if (!transloaditKey) {
-              continue;
-            }
-
+            if (!transloaditKey) continue;
             setCurrentNodeId(n.id);
-            updateNodeStatus(runId, n.id, "running");
+            const startedAt = await trackNodeStart(n);
 
-            const res = await fetch(n.data.file as string);
-            const blob = await res.blob();
-            
-            const formData = new FormData();
-            formData.append("params", JSON.stringify({
-              auth: { key: transloaditKey },
-              steps: { 
-                resize: { robot: "/image/resize" } 
+            try {
+              const res = await fetch(n.data.file as string);
+              const blob = await res.blob();
+              
+              const formData = new FormData();
+              formData.append("params", JSON.stringify({
+                auth: { key: transloaditKey },
+                steps: { resize: { robot: "/image/resize" } }
+              }));
+              formData.append("file", blob, (n.data.fileName as string) || "upload.png");
+              
+              const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
+                method: "POST",
+                body: formData
+              });
+              
+              if (!uploadRes.ok) {
+                await trackNodeEnd(n.id, startedAt, "failed", undefined, "Upload failed");
+                setCurrentNodeId(null);
+                continue;
               }
-            }));
-            formData.append("file", blob, (n.data.fileName as string) || "upload.png");
-            
-            const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
-              method: "POST",
-              body: formData
-            });
-            
-            if (!uploadRes.ok) {
-              updateNodeStatus(runId, n.id, "failed", "Upload failed");
-              setCurrentNodeId(null);
-              continue;
-            }
-            let uploadResult = await uploadRes.json();
+              let uploadResult = await uploadRes.json();
 
-            if (uploadResult.ok === "ASSEMBLY_EXECUTING" && uploadResult.assembly_ssl_url) {
-              let attempts = 0;
-              while (uploadResult.ok === "ASSEMBLY_EXECUTING" && attempts < 20) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                const pollRes = await fetch(uploadResult.assembly_ssl_url);
-                uploadResult = await pollRes.json();
-                attempts++;
+              if (uploadResult.ok === "ASSEMBLY_EXECUTING" && uploadResult.assembly_ssl_url) {
+                let attempts = 0;
+                while (uploadResult.ok === "ASSEMBLY_EXECUTING" && attempts < 20) {
+                  await new Promise(resolve => setTimeout(resolve, 1000));
+                  const pollRes = await fetch(uploadResult.assembly_ssl_url);
+                  uploadResult = await pollRes.json();
+                  attempts++;
+                }
               }
-            }
-            
-            let sslUrl = uploadResult?.results?.resize?.[0]?.ssl_url;
-            
-            if (!sslUrl) {
-              sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
-            }
-            
-            if (!sslUrl) {
-              const resultsKeys = Object.keys(uploadResult?.results || {});
-              if (resultsKeys.length > 0) {
-                sslUrl = uploadResult.results[resultsKeys[0]]?.[0]?.ssl_url;
+              
+              let sslUrl = uploadResult?.results?.resize?.[0]?.ssl_url;
+              if (!sslUrl) sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
+              if (!sslUrl) {
+                const resultsKeys = Object.keys(uploadResult?.results || {});
+                if (resultsKeys.length > 0) sslUrl = uploadResult.results[resultsKeys[0]]?.[0]?.ssl_url;
               }
-            }
-            
-            if (sslUrl) {
-               currentNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
-               graphChanged = true;
-               updateNodeStatus(runId, n.id, "success");
-            } else {
-               updateNodeStatus(runId, n.id, "failed", "No URL returned");
+              
+              if (sslUrl) {
+                currentNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
+                graphChanged = true;
+                await trackNodeEnd(n.id, startedAt, "success", "Image processed successfully");
+              } else {
+                await trackNodeEnd(n.id, startedAt, "failed", undefined, "No URL returned");
+              }
+            } catch (e: any) {
+              await trackNodeEnd(n.id, startedAt, "failed", undefined, e.message || "Unknown error");
             }
             setCurrentNodeId(null);
           }
 
           if (n.type === "video" && n.data.file && !n.data.output) {
-            if (!transloaditKey) {
-              continue
-            }
-
+            if (!transloaditKey) continue;
             setCurrentNodeId(n.id);
-            updateNodeStatus(runId, n.id, "running");
+            const startedAt = await trackNodeStart(n);
 
-            const res = await fetch(n.data.file as string);
-            const blob = await res.blob();
-            
-            const formData = new FormData();
-            formData.append("params", JSON.stringify({
-              auth: { key: transloaditKey },
-              steps: { 
-                encode: { robot: "/video/encode", preset: "iphone-high" } 
+            try {
+              const res = await fetch(n.data.file as string);
+              const blob = await res.blob();
+              
+              const formData = new FormData();
+              formData.append("params", JSON.stringify({
+                auth: { key: transloaditKey },
+                steps: { encode: { robot: "/video/encode", preset: "iphone-high" } }
+              }));
+              formData.append("file", blob, (n.data.fileName as string) || "upload.mp4");
+              
+              const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
+                method: "POST",
+                body: formData
+              });
+              
+              if (!uploadRes.ok) {
+                await trackNodeEnd(n.id, startedAt, "failed", undefined, "Upload failed");
+                setCurrentNodeId(null);
+                continue;
               }
-            }));
-            formData.append("file", blob, (n.data.fileName as string) || "upload.mp4");
-            
-            const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
-              method: "POST",
-              body: formData
-            });
-            
-            if (!uploadRes.ok) {
-              updateNodeStatus(runId, n.id, "failed", "Upload failed");
-              setCurrentNodeId(null);
-              continue;
-            }
-            let uploadResult = await uploadRes.json();
+              let uploadResult = await uploadRes.json();
 
-            if (uploadResult.ok === "ASSEMBLY_EXECUTING" && uploadResult.assembly_ssl_url) {
-              let attempts = 0;
-              while (uploadResult.ok === "ASSEMBLY_EXECUTING" && attempts < 60) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                const pollRes = await fetch(uploadResult.assembly_ssl_url);
-                uploadResult = await pollRes.json();
-                attempts++;
+              if (uploadResult.ok === "ASSEMBLY_EXECUTING" && uploadResult.assembly_ssl_url) {
+                let attempts = 0;
+                while (uploadResult.ok === "ASSEMBLY_EXECUTING" && attempts < 60) {
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  const pollRes = await fetch(uploadResult.assembly_ssl_url);
+                  uploadResult = await pollRes.json();
+                  attempts++;
+                }
               }
-            }
-            
-            let sslUrl = uploadResult?.results?.encode?.[0]?.ssl_url;
-            
-            if (!sslUrl) {
-              sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
-            }
-            
-            if (!sslUrl) {
-              const resultsKeys = Object.keys(uploadResult?.results || {});
-              if (resultsKeys.length > 0) {
-                sslUrl = uploadResult.results[resultsKeys[0]]?.[0]?.ssl_url;
+              
+              let sslUrl = uploadResult?.results?.encode?.[0]?.ssl_url;
+              if (!sslUrl) sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
+              if (!sslUrl) {
+                const resultsKeys = Object.keys(uploadResult?.results || {});
+                if (resultsKeys.length > 0) sslUrl = uploadResult.results[resultsKeys[0]]?.[0]?.ssl_url;
               }
-            }
-            
-            if (sslUrl) {
-               currentNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
-               graphChanged = true;
-               updateNodeStatus(runId, n.id, "success");
-            } else {
-               updateNodeStatus(runId, n.id, "failed", "No URL returned");
+              
+              if (sslUrl) {
+                currentNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
+                graphChanged = true;
+                await trackNodeEnd(n.id, startedAt, "success", "Video processed successfully");
+              } else {
+                await trackNodeEnd(n.id, startedAt, "failed", undefined, "No URL returned");
+              }
+            } catch (e: any) {
+              await trackNodeEnd(n.id, startedAt, "failed", undefined, e.message || "Unknown error");
             }
             setCurrentNodeId(null);
           }
@@ -223,16 +267,21 @@ export default function RunWorkflowButton({
         }
         
       } catch (e) {
+        console.error("Error during client preprocessing:", e);
       }
 
       if (currentNodes.length === 1 && (currentNodes[0].type === "text" || currentNodes[0].type === "image" || currentNodes[0].type === "video")) {
-        updateRun(runId, { status: "completed", endTime: Date.now() });
-        nodeIds.forEach(id => updateNodeStatus(runId, id, "success"));
+        const endedAt = Date.now();
+        updateRun(runId, { status: "completed", endedAt });
+        fetch(`/api/runs/${runId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "completed", endedAt }),
+        }).catch(console.error);
         return;
       }
 
       // Phase 2: Server-side execution via trigger.dev
-      // Highlight the first non-processed node to indicate server work is happening
       const firstServerNode = currentNodes.find(n => n.type !== "text" || edges.some(e => e.target === n.id));
       if (firstServerNode) {
         setCurrentNodeId(firstServerNode.id);
@@ -264,27 +313,48 @@ export default function RunWorkflowButton({
           for (const en of executedNodes) {
             setCurrentNodeId(en.id);
             
-            // Update this specific node in the React Flow graph
+            // Check if node is already tracked (e.g. text/image root)
+            let existingNodeRun = null;
+            useHistoryStore.getState().runs.forEach(r => {
+              if (r.id === runId) existingNodeRun = r.nodeRuns.find(nr => nr.nodeId === en.id);
+            });
+
+            let startedAt = Date.now();
+            if (!existingNodeRun) {
+              startedAt = await trackNodeStart(en);
+            } else {
+              // It's already tracked from phase 1, skip adding it again unless it needs an update
+            }
+            
             setNodes((prev) => 
               prev.map(node => {
                 return node.id === en.id ? { ...node, data: en.data } : node;
               })
             );
 
-            const status = en.data?.output?.toString().startsWith("Error") ? "failed" : "success";
-            updateNodeStatus(runId, en.id, status, status === "failed" ? en.data.output : undefined);
+            const isError = en.data?.output?.toString().startsWith("Error");
+            const status = isError ? "failed" : "success";
+            const outputStr = en.data?.output?.toString();
 
-            // Brief pause so the user sees each node light up sequentially
+            // Only track end if we actually tracked start just now (meaning it wasn't a phase 1 node)
+            // Or if we did track it in Phase 1, its status was already set to success
+            if (!existingNodeRun) {
+              await trackNodeEnd(en.id, startedAt, status, isError ? undefined : outputStr, isError ? outputStr : undefined);
+            }
+
             await new Promise(resolve => setTimeout(resolve, 400));
             setCurrentNodeId(null);
-            // Small gap before next node highlights
             await new Promise(resolve => setTimeout(resolve, 100));
           }
 
-          updateRun(runId, { 
-            status: result.success ? "completed" : "failed", 
-            endTime: Date.now() 
-          });
+          const endedAt = Date.now();
+          const status = result.success ? "completed" : "failed";
+          updateRun(runId, { status, endedAt });
+          fetch(`/api/runs/${runId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status, endedAt }),
+          }).catch(console.error);
 
           // Phase 4: Post-process image uploads (Transloadit) — node by node
           for (const executedNode of executedNodes) {
@@ -340,8 +410,14 @@ export default function RunWorkflowButton({
         }
 
       } catch (error: any) {
-        updateRun(runId, { status: "failed", endTime: Date.now() });
-        nodeIds.forEach(id => updateNodeStatus(runId, id, "failed", error.message));
+        const endedAt = Date.now();
+        updateRun(runId, { status: "failed", endedAt });
+        fetch(`/api/runs/${runId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "failed", endedAt }),
+        }).catch(console.error);
+        // Note: individual nodes that didn't start will be left untracked, which is correct for progressive tracking
       }
     } finally {
       setIsRunningLocal(false);
@@ -369,4 +445,3 @@ export default function RunWorkflowButton({
     </button>
   );
 }
-

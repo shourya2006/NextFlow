@@ -10,7 +10,13 @@ import {
   Clock, 
   Loader2, 
   ChevronRight,
-  PlayCircle
+  PlayCircle,
+  FileText,
+  Image as ImageIcon,
+  Video,
+  Wand2,
+  Crop,
+  Film
 } from "lucide-react";
 
 export default function WorkflowHistorySidebar() {
@@ -20,17 +26,30 @@ export default function WorkflowHistorySidebar() {
 
   const activeRun = runs.find((r) => r.id === activeRunId);
 
-  const getStatusIcon = (status: NodeStatus | WorkflowRun["status"]) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case "success":
       case "completed":
-        return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
+        return <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />;
       case "failed":
-        return <XCircle className="w-4 h-4 text-rose-500" />;
+        return <XCircle className="w-4 h-4 text-rose-500 shrink-0" />;
       case "running":
-        return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />;
+        return <Loader2 className="w-4 h-4 text-blue-500 animate-spin shrink-0" />;
       default:
-        return <Clock className="w-4 h-4 text-zinc-500" />;
+        return <Clock className="w-4 h-4 text-zinc-500 shrink-0" />;
+    }
+  };
+
+  const getNodeIcon = (type: string) => {
+    const props = { className: "w-3 h-3" };
+    switch (type) {
+      case "text": return <FileText {...props} />;
+      case "image": return <ImageIcon {...props} />;
+      case "video": return <Video {...props} />;
+      case "llm": return <Wand2 {...props} />;
+      case "crop": return <Crop {...props} />;
+      case "frame": return <Film {...props} />;
+      default: return <Clock {...props} />;
     }
   };
 
@@ -87,17 +106,24 @@ export default function WorkflowHistorySidebar() {
                       <div className="flex items-center gap-2">
                         {getStatusIcon(run.status)}
                         <span className={`text-sm font-medium ${d ? 'text-zinc-200' : 'text-zinc-700'}`}>
-                          Run {run.id.slice(0, 6)}
+                          Run {run.id.slice(0, 8)}
                         </span>
                       </div>
                       <span className={`text-[10px] ${d ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                        {formatRelativeTime(run.startTime)}
+                        {formatRelativeTime(run.startedAt || Date.now())}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <p className={`text-[11px] ${d ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                        {Object.keys(run.nodeStatuses).length} nodes executed
-                      </p>
+                    <div className="flex items-center justify-between mt-2">
+                      <div className="flex items-center gap-2">
+                        <p className={`text-[11px] ${d ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                          {(run.nodeRuns || []).length} nodes
+                        </p>
+                        {run.durationMs !== undefined && (
+                          <p className={`text-[10px] font-mono ${d ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                            {Math.round(run.durationMs / 100) / 10}s
+                          </p>
+                        )}
+                      </div>
                       <ChevronRight className={`w-3 h-3 transition-colors ${d ? 'text-zinc-600 group-hover:text-zinc-400' : 'text-zinc-400 group-hover:text-zinc-600'}`} />
                     </div>
                   </button>
@@ -130,13 +156,15 @@ export default function WorkflowHistorySidebar() {
                   </div>
                   <div className="flex justify-between text-[11px]">
                     <span className={d ? 'text-zinc-500' : 'text-zinc-400'}>Started</span>
-                    <span className={d ? 'text-zinc-300' : 'text-zinc-600'}>{new Date(activeRun.startTime).toLocaleTimeString()}</span>
+                    <span className={d ? 'text-zinc-300' : 'text-zinc-600'}>{new Date(activeRun.startedAt || Date.now()).toLocaleTimeString()}</span>
                   </div>
-                  {activeRun.endTime && (
+                  {(activeRun.durationMs !== undefined || activeRun.endedAt) && (
                     <div className="flex justify-between text-[11px]">
                       <span className={d ? 'text-zinc-500' : 'text-zinc-400'}>Duration</span>
                       <span className={d ? 'text-zinc-300' : 'text-zinc-600'}>
-                        {Math.round((activeRun.endTime - activeRun.startTime) / 1000)}s
+                        {activeRun.durationMs !== undefined 
+                          ? Math.round(activeRun.durationMs / 100) / 10 
+                          : Math.round(((activeRun.endedAt || Date.now()) - (activeRun.startedAt || Date.now())) / 1000)}s
                       </span>
                     </div>
                   )}
@@ -144,31 +172,62 @@ export default function WorkflowHistorySidebar() {
               </div>
 
               <div>
-                <h3 className={`text-xs font-medium uppercase tracking-wider mb-3 ${d ? 'text-zinc-500' : 'text-zinc-400'}`}>Nodes</h3>
-                <div className="space-y-2">
-                  {Object.entries(activeRun.nodeStatuses).map(([nodeId, info]) => (
+                <h3 className={`text-xs font-medium uppercase tracking-wider mb-3 flex items-center justify-between ${d ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                  <span>Execution Order</span>
+                  <span className="normal-case text-[10px]">{(activeRun.nodeRuns || []).length} steps</span>
+                </h3>
+                <div className="space-y-2 relative before:absolute before:inset-y-0 before:left-3.5 before:w-[2px] before:bg-zinc-200 dark:before:bg-zinc-800">
+                  {/* Sort by executionOrder just in case */}
+                  {[...(activeRun.nodeRuns || [])].sort((a, b) => a.executionOrder - b.executionOrder).map((info, idx) => (
                     <div 
-                      key={nodeId}
-                      className={`flex items-start gap-3 p-2.5 rounded-lg border ${d ? 'bg-zinc-900/40 border-zinc-800/30' : 'bg-zinc-50 border-zinc-200'}`}
+                      key={`${info.nodeId}-${idx}`}
+                      className={`relative flex items-start gap-3 p-3 rounded-xl border transition-colors ${d ? 'bg-[#141414] border-zinc-800' : 'bg-white border-zinc-200'} shadow-sm`}
                     >
-                      <div className="mt-0.5">
+                      <div className={`mt-0.5 relative z-10 rounded-full p-0.5 ${d ? 'bg-[#141414]' : 'bg-white'}`}>
                         {getStatusIcon(info.status)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={`text-[13px] font-medium truncate ${d ? 'text-zinc-200' : 'text-zinc-700'}`}>
-                          {info.label || nodeId}
-                        </p>
-                        <p className={`text-[10px] font-mono truncate ${d ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                          {nodeId}
-                        </p>
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <div>
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <span className={`flex items-center justify-center p-1 rounded-md ${d ? 'bg-zinc-800 text-zinc-300' : 'bg-zinc-100 text-zinc-600'}`}>
+                                {getNodeIcon(info.type)}
+                              </span>
+                              <p className={`text-[13px] font-medium truncate ${d ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                                {info.label || info.nodeId}
+                              </p>
+                            </div>
+                            <p className={`text-[10px] font-mono truncate ${d ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                              {info.nodeId}
+                            </p>
+                          </div>
+                          {info.durationMs !== undefined && (
+                            <span className={`text-[10px] font-mono shrink-0 px-1.5 py-0.5 rounded-full ${d ? 'bg-zinc-800/50 text-zinc-400' : 'bg-zinc-100 text-zinc-500'}`}>
+                              {Math.round(info.durationMs / 100) / 10}s
+                            </span>
+                          )}
+                        </div>
+
+                        {info.outputSummary && info.status === "success" && (
+                          <div className={`mt-2 text-[11px] p-2 rounded-lg break-words whitespace-pre-wrap ${d ? 'bg-zinc-900/50 text-zinc-400' : 'bg-zinc-50 text-zinc-600'}`}>
+                            {info.outputSummary}
+                          </div>
+                        )}
+
                         {info.error && (
-                          <p className="text-[10px] text-rose-400 mt-1 line-clamp-2 bg-rose-500/5 p-1 rounded">
+                          <div className={`mt-2 text-[11px] p-2 rounded-lg break-words whitespace-pre-wrap border ${d ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
                             {info.error}
-                          </p>
+                          </div>
                         )}
                       </div>
                     </div>
                   ))}
+                  {(activeRun.nodeRuns || []).length === 0 && (
+                    <div className="text-center py-6">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto text-zinc-400 mb-2" />
+                      <p className={`text-xs ${d ? 'text-zinc-500' : 'text-zinc-400'}`}>Waiting for execution to start...</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
