@@ -40,7 +40,8 @@
   {
     "id": "llm-node-1777074139592",
     "data": {
-      "label": "LLM Node"
+      "label": "LLM Node",
+      "model": "gpt-4o"
     },
     "type": "llm",
     "dragging": false,
@@ -146,7 +147,8 @@
   {
     "id": "llm-node-1777074564069",
     "data": {
-      "label": "LLM Node"
+      "label": "LLM Node",
+      "model": "gpt-4o"
     },
     "type": "llm",
     "dragging": false,

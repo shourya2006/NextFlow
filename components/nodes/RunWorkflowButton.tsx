@@ -15,8 +15,10 @@ export default function RunWorkflowButton({
   const edges = useEdges();
   const { getNodes, getEdges, setNodes } = useReactFlow();
   const nodeCount = useStore((s) => s.nodes.length);
-  const [isRunning, setIsRunningLocal] = useState(false);
-  const { setRunningIds, setCurrentNodeId, clearRunning } = useRunStore();
+  const [isRunningLocal, setIsRunningLocal] = useState(false);
+  const { setRunningIds, addActiveNodeId, removeActiveNodeId, clearRunning } = useRunStore();
+  const isStoreRunning = useRunStore((s) => s.runningNodeIds.has(nodeId));
+  const isRunning = isRunningLocal || isStoreRunning;
   const { addRun, updateRun, addNodeRun, updateNodeRun, currentWorkflowId } = useHistoryStore();
 
   const isRoot = !edges.some((e) => e.target === nodeId);
@@ -24,7 +26,7 @@ export default function RunWorkflowButton({
   if (!isRoot) return null;
 
   const handleRun = async () => {
-    if (isRunning) return;
+    if (isRunningLocal) return;
     setIsRunningLocal(true);
     let runId = `run-${Date.now()}`; // Fallback local ID
 
@@ -127,22 +129,20 @@ export default function RunWorkflowButton({
       };
 
       try {
-        // Phase 1: Client-side pre-processing (image/video uploads) — node by node
-        for (let i = 0; i < currentNodes.length; i++) {
-          const n = currentNodes[i];
-          
+        // Phase 1: Client-side pre-processing (image/video uploads) — run in parallel
+        const phase1Promises = currentNodes.map(async (n, i) => {
           if (n.type === "text" && !edges.some(e => e.target === n.id)) {
-            setCurrentNodeId(n.id);
+            addActiveNodeId(n.id);
             const startedAt = await trackNodeStart(n);
             currentNodes[i] = { ...n, data: { ...n.data, output: n.data.text } };
             graphChanged = true;
             await trackNodeEnd(n.id, startedAt, "success", n.data.text as string | undefined);
-            setCurrentNodeId(null);
+            removeActiveNodeId(n.id);
           }
           
           if (n.type === "image" && n.data.file && !n.data.output) {
-            if (!transloaditKey) continue;
-            setCurrentNodeId(n.id);
+            if (!transloaditKey) return;
+            addActiveNodeId(n.id);
             const startedAt = await trackNodeStart(n);
 
             try {
@@ -163,8 +163,8 @@ export default function RunWorkflowButton({
               
               if (!uploadRes.ok) {
                 await trackNodeEnd(n.id, startedAt, "failed", undefined, "Upload failed");
-                setCurrentNodeId(null);
-                continue;
+                removeActiveNodeId(n.id);
+                return;
               }
               let uploadResult = await uploadRes.json();
 
@@ -195,12 +195,12 @@ export default function RunWorkflowButton({
             } catch (e: any) {
               await trackNodeEnd(n.id, startedAt, "failed", undefined, e.message || "Unknown error");
             }
-            setCurrentNodeId(null);
+            removeActiveNodeId(n.id);
           }
 
           if (n.type === "video" && n.data.file && !n.data.output) {
-            if (!transloaditKey) continue;
-            setCurrentNodeId(n.id);
+            if (!transloaditKey) return;
+            addActiveNodeId(n.id);
             const startedAt = await trackNodeStart(n);
 
             try {
@@ -221,8 +221,8 @@ export default function RunWorkflowButton({
               
               if (!uploadRes.ok) {
                 await trackNodeEnd(n.id, startedAt, "failed", undefined, "Upload failed");
-                setCurrentNodeId(null);
-                continue;
+                removeActiveNodeId(n.id);
+                return;
               }
               let uploadResult = await uploadRes.json();
 
@@ -253,9 +253,11 @@ export default function RunWorkflowButton({
             } catch (e: any) {
               await trackNodeEnd(n.id, startedAt, "failed", undefined, e.message || "Unknown error");
             }
-            setCurrentNodeId(null);
+            removeActiveNodeId(n.id);
           }
-        }
+        });
+        
+        await Promise.all(phase1Promises);
         
         if (graphChanged) {
           setNodes((prev) => 
@@ -282,23 +284,79 @@ export default function RunWorkflowButton({
       }
 
       // Phase 2: Server-side execution via trigger.dev
-      const firstServerNode = currentNodes.find(n => n.type !== "text" || edges.some(e => e.target === n.id));
-      if (firstServerNode) {
-        setCurrentNodeId(firstServerNode.id);
-      }
+      // Poll the DB concurrently to show real-time animation + history updates
+      let pollInterval: NodeJS.Timeout | null = null;
+      let isPolling = true;
+      
+      const syncFromDb = async () => {
+        try {
+          const res = await fetch(`/api/runs/${runId}`);
+          if (!res.ok) return;
+          const runData = await res.json();
+          if (!runData.nodeRuns) return;
+          
+          const runningIds: string[] = [];
+          for (const nr of runData.nodeRuns) {
+            // Update history sidebar
+            const existingRun = useHistoryStore.getState().runs.find(r => r.id === runId);
+            const existingNodeRun = existingRun?.nodeRuns?.find((enr: any) => enr.nodeId === nr.nodeId);
+            
+            if (!existingNodeRun) {
+              addNodeRun(runId, {
+                nodeId: nr.nodeId,
+                label: nr.label,
+                type: nr.type,
+                status: nr.status,
+                startedAt: new Date(nr.startedAt).getTime(),
+                executionOrder: nr.executionOrder,
+                ...(nr.endedAt ? { endedAt: new Date(nr.endedAt).getTime() } : {}),
+                ...(nr.durationMs ? { durationMs: nr.durationMs } : {}),
+                ...(nr.outputSummary ? { outputSummary: nr.outputSummary } : {}),
+                ...(nr.error ? { error: nr.error } : {}),
+              });
+            } else if (existingNodeRun.status !== nr.status) {
+              updateNodeRun(runId, nr.nodeId, {
+                status: nr.status,
+                ...(nr.endedAt ? { endedAt: new Date(nr.endedAt).getTime() } : {}),
+                ...(nr.durationMs ? { durationMs: nr.durationMs } : {}),
+                ...(nr.outputSummary ? { outputSummary: nr.outputSummary } : {}),
+                ...(nr.error ? { error: nr.error } : {}),
+              });
+            }
+            
+            if (nr.status === "running") {
+              runningIds.push(nr.nodeId);
+            }
+          }
+          if (isPolling) {
+            useRunStore.getState().setActiveNodeIds(runningIds);
+          }
+        } catch (e) {}
+      };
+      
+      // Start polling immediately
+      pollInterval = setInterval(syncFromDb, 600);
 
       try {
+        // This blocks for the full execution duration (10-30s)
         const response = await fetch("/api/run", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            runId,
             startNodeId: nodeId,
             nodes: currentNodes,
             edges: componentEdges,
           }),
         });
+
+        // Stop polling
+        isPolling = false;
+        if (pollInterval) clearInterval(pollInterval);
+        
+        // Final sync to catch last completed nodes
+        await syncFromDb();
+        useRunStore.getState().setActiveNodeIds([]);
 
         if (!response.ok) {
           throw new Error("Failed to run workflow");
@@ -309,42 +367,11 @@ export default function RunWorkflowButton({
         if (result.success && result.result?.executionOrder) {
           const executedNodes = result.result.executionOrder;
           
-          // Phase 3: Animate through execution order one node at a time
+          // Apply final node data to canvas
           for (const en of executedNodes) {
-            setCurrentNodeId(en.id);
-            
-            // Check if node is already tracked (e.g. text/image root)
-            let existingNodeRun = null;
-            useHistoryStore.getState().runs.forEach(r => {
-              if (r.id === runId) existingNodeRun = r.nodeRuns.find(nr => nr.nodeId === en.id);
-            });
-
-            let startedAt = Date.now();
-            if (!existingNodeRun) {
-              startedAt = await trackNodeStart(en);
-            } else {
-              // It's already tracked from phase 1, skip adding it again unless it needs an update
-            }
-            
             setNodes((prev) => 
-              prev.map(node => {
-                return node.id === en.id ? { ...node, data: en.data } : node;
-              })
+              prev.map(node => node.id === en.id ? { ...node, data: en.data } : node)
             );
-
-            const isError = en.data?.output?.toString().startsWith("Error");
-            const status = isError ? "failed" : "success";
-            const outputStr = en.data?.output?.toString();
-
-            // Only track end if we actually tracked start just now (meaning it wasn't a phase 1 node)
-            // Or if we did track it in Phase 1, its status was already set to success
-            if (!existingNodeRun) {
-              await trackNodeEnd(en.id, startedAt, status, isError ? undefined : outputStr, isError ? outputStr : undefined);
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 400));
-            setCurrentNodeId(null);
-            await new Promise(resolve => setTimeout(resolve, 100));
           }
 
           const endedAt = Date.now();
@@ -356,60 +383,63 @@ export default function RunWorkflowButton({
             body: JSON.stringify({ status, endedAt }),
           }).catch(console.error);
 
-          // Phase 4: Post-process image uploads (Transloadit) — node by node
-          for (const executedNode of executedNodes) {
-            if (executedNode.type === "image" && executedNode.data.output && (executedNode.data.output as string).startsWith("data:")) {
-              if (!transloaditKey) continue;
-              try {
-                setCurrentNodeId(executedNode.id);
-                const dataUrl = executedNode.data.output as string;
-                const res = await fetch(dataUrl);
-                const blob = await res.blob();
+          // Phase 4: Post-process image uploads (Transloadit) asynchronously in the background
+          (async () => {
+            for (const executedNode of executedNodes) {
+              if (executedNode.type === "image" && executedNode.data.output && (executedNode.data.output as string).startsWith("data:")) {
+                if (!transloaditKey) continue;
+                try {
+                  const dataUrl = executedNode.data.output as string;
+                  const res = await fetch(dataUrl);
+                  const blob = await res.blob();
 
-                const formData = new FormData();
-                formData.append("params", JSON.stringify({
-                  auth: { key: transloaditKey },
-                  steps: { resize: { robot: "/image/resize" } }
-                }));
-                formData.append("file", blob, `image_${executedNode.id}.png`);
+                  const formData = new FormData();
+                  formData.append("params", JSON.stringify({
+                    auth: { key: transloaditKey },
+                    steps: { resize: { robot: "/image/resize" } }
+                  }));
+                  formData.append("file", blob, `image_${executedNode.id}.png`);
 
-                const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
-                  method: "POST",
-                  body: formData
-                });
+                  const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
+                    method: "POST",
+                    body: formData
+                  });
 
-                let uploadResult = await uploadRes.json();
-                if (uploadResult.ok === "ASSEMBLY_EXECUTING" && uploadResult.assembly_ssl_url) {
-                  let attempts = 0;
-                  while (uploadResult.ok === "ASSEMBLY_EXECUTING" && attempts < 20) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    const pollRes = await fetch(uploadResult.assembly_ssl_url);
-                    uploadResult = await pollRes.json();
-                    attempts++;
+                  let uploadResult = await uploadRes.json();
+                  if (uploadResult.ok === "ASSEMBLY_EXECUTING" && uploadResult.assembly_ssl_url) {
+                    let attempts = 0;
+                    while (uploadResult.ok === "ASSEMBLY_EXECUTING" && attempts < 20) {
+                      await new Promise(resolve => setTimeout(resolve, 1000));
+                      const pollRes = await fetch(uploadResult.assembly_ssl_url);
+                      uploadResult = await pollRes.json();
+                      attempts++;
+                    }
                   }
-                }
 
-                let sslUrl = uploadResult?.results?.resize?.[0]?.ssl_url;
-                if (!sslUrl) sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
-                if (!sslUrl) {
-                  const keys = Object.keys(uploadResult?.results || {});
-                  if (keys.length > 0) sslUrl = uploadResult.results[keys[0]]?.[0]?.ssl_url;
-                }
+                  let sslUrl = uploadResult?.results?.resize?.[0]?.ssl_url;
+                  if (!sslUrl) sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
+                  if (!sslUrl) {
+                    const keys = Object.keys(uploadResult?.results || {});
+                    if (keys.length > 0) sslUrl = uploadResult.results[keys[0]]?.[0]?.ssl_url;
+                  }
 
-                if (sslUrl) {
-                  setNodes((prev) => 
-                    prev.map(node => node.id === executedNode.id ? { ...node, data: { ...node.data, output: sslUrl } } : node)
-                  );
+                  if (sslUrl) {
+                    setNodes((prev) => 
+                      prev.map(node => node.id === executedNode.id ? { ...node, data: { ...node.data, output: sslUrl } } : node)
+                    );
+                  }
+                } catch (e) {
+                  console.error("Transloadit post-process failed for node", executedNode.id, e);
                 }
-                setCurrentNodeId(null);
-              } catch (e) {
-                setCurrentNodeId(null);
               }
             }
-          }
+          })();
         }
 
       } catch (error: any) {
+        isPolling = false;
+        if (pollInterval) clearInterval(pollInterval);
+        useRunStore.getState().setActiveNodeIds([]);
         const endedAt = Date.now();
         updateRun(runId, { status: "failed", endedAt });
         fetch(`/api/runs/${runId}`, {
@@ -417,7 +447,6 @@ export default function RunWorkflowButton({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: "failed", endedAt }),
         }).catch(console.error);
-        // Note: individual nodes that didn't start will be left untracked, which is correct for progressive tracking
       }
     } finally {
       setIsRunningLocal(false);

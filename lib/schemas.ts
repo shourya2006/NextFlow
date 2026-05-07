@@ -21,6 +21,7 @@ export const workflowRenameSchema = z.object({
 // ─── Workflow Run Schema ───
 
 export const workflowRunSchema = z.object({
+  runId: z.string().optional(),
   startNodeId: z.string().min(1, "Start node ID is required"),
   nodes: z.array(
     z.object({

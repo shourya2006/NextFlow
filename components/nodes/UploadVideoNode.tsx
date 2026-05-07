@@ -10,8 +10,8 @@ export default function UploadVideoNode({ id, data, selected }: { id: string, da
   const { setNodes } = useReactFlow();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showModal, setShowModal] = useState(false);
-  const currentNodeId = useRunStore((s) => s.currentNodeId);
-  const isRunning = currentNodeId === id;
+  const isRunning = useRunStore((s) => s.activeNodeIds.has(id));
+  
   const t = useNodeTheme();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -21,7 +21,7 @@ export default function UploadVideoNode({ id, data, selected }: { id: string, da
       reader.onloadend = () => {
         const base64String = reader.result as string;
         setNodes((nds) => 
-          nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, file: base64String, fileName: file.name } } : n))
+          nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, file: base64String, fileName: file.name, output: undefined } } : n))
         );
       };
       reader.readAsDataURL(file);

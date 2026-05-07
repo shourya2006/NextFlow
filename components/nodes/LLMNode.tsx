@@ -9,6 +9,8 @@ import { useRunStore } from "@/store/runStore";
 import { useNodeTheme } from "./nodeTheme";
 
 const MODELS = [
+  { id: "gpt-4o", label: "OpenAI GPT-4o" },
+  { id: "gpt-4o-mini", label: "OpenAI GPT-4o Mini" },
   { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
   { id: "gemini-3.1-flash-lite-preview", label: "Gemini 3.1 Flash Lite" },
   { id: "gemma-3-1b-it", label: "Gemma 3 1B" },
@@ -20,8 +22,8 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
   const { setNodes } = useReactFlow();
   const edges = useEdges();
   const nodes = useNodes();
-  const currentNodeId = useRunStore((s) => s.currentNodeId);
-  const isRunning = currentNodeId === id;
+  const isRunning = useRunStore((s) => s.activeNodeIds.has(id));
+  
   const t = useNodeTheme();
 
   const promptEdge = edges.find(e => e.target === id && e.targetHandle === "prompt");
@@ -45,8 +47,8 @@ export default function LLMNode({ id, data, selected }: { id: string, data: any,
     ? (imageSourceNode.data.output || "")
     : "";
 
-  const selectedModel = data.model || "gemini-2.0-flash";
-  const selectedModelLabel = MODELS.find(m => m.id === selectedModel)?.label || "Gemini 2.0 Flash";
+  const selectedModel = data.model || "gpt-4o";
+  const selectedModelLabel = MODELS.find(m => m.id === selectedModel)?.label || "OpenAI GPT-4o";
 
   const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (isPromptConnected) return;

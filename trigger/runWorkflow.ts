@@ -1,10 +1,12 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 import ffmpegLib from "fluent-ffmpeg";
 import sharp from "sharp";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { prisma } from "../lib/prisma";
 
 /**
  * Resolves a URL (data: or http/https) into a Buffer.
@@ -57,10 +59,11 @@ async function resolveWithFallback(...sources: (string | undefined | null)[]): P
 export const runWorkflow = task({
   id: "workflow-run",
   run: async (payload: any) => {
-    logger.log("Workflow received", { startNodeId: payload.startNodeId });
+    logger.log("Workflow received", { startNodeId: payload.startNodeId, runId: payload.runId });
 
     const nodes = payload.nodes || [];
     const edges = payload.edges || [];
+    const runId = payload.runId;
 
     const inDegree: Record<string, number> = {};
     const adjList: Record<string, string[]> = {};
@@ -86,18 +89,25 @@ export const runWorkflow = task({
     });
 
     const executionOrder: string[] = [];
+    const executionLayers: string[][] = [];
 
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      executionOrder.push(current);
+    let currentQueue = [...queue];
 
-      const neighbors = adjList[current] || [];
-      for (const neighbor of neighbors) {
-        inDegree[neighbor]--;
-        if (inDegree[neighbor] === 0) {
-          queue.push(neighbor);
+    while (currentQueue.length > 0) {
+      executionLayers.push([...currentQueue]);
+      const nextQueue: string[] = [];
+      
+      for (const current of currentQueue) {
+        executionOrder.push(current);
+        const neighbors = adjList[current] || [];
+        for (const neighbor of neighbors) {
+          inDegree[neighbor]--;
+          if (inDegree[neighbor] === 0) {
+            nextQueue.push(neighbor);
+          }
         }
       }
+      currentQueue = nextQueue;
     }
 
     if (executionOrder.length !== nodes.length) {
@@ -106,16 +116,71 @@ export const runWorkflow = task({
     }
 
     const orderedNodes = executionOrder.map(id => nodes.find((n: any) => n.id === id));
+    const layeredNodes = executionLayers.map(layer => layer.map(id => nodes.find((n: any) => n.id === id)));
     
-    logger.info("Graph sorted. Beginning execution...", { executionOrder });
+    logger.info("Graph sorted. Beginning execution...", { executionLayers });
 
-    for (const node of orderedNodes) {
-      if (node.type === "video") {
+    for (const levelNodes of layeredNodes) {
+      await Promise.all(levelNodes.map(async (node: any) => {
+        const startedAtMs = Date.now();
+        if (runId) {
+          try {
+            await prisma.nodeRun.create({
+              data: {
+                runId,
+                nodeId: node.id,
+                label: node.data?.label || node.id,
+                type: node.type || "unknown",
+                status: "running",
+                executionOrder: executionOrder.indexOf(node.id) !== -1 ? executionOrder.indexOf(node.id) : 0,
+              }
+            });
+          } catch (e) {
+            // Might already exist if Phase 1 tracked it, so ignore error
+          }
+        }
+
+        let isError = false;
+        let errorMessage = "";
+
+        // Function to handle completion
+        const markComplete = async () => {
+          if (!runId) return;
+          const endedAtMs = Date.now();
+          const durationMs = endedAtMs - startedAtMs;
+          const finalStatus = isError ? "failed" : "success";
+          let outSum = node.data.output?.toString() || errorMessage;
+          if (outSum.length > 200) outSum = outSum.substring(0, 200) + "...";
+          
+          try {
+            const existingRuns = await prisma.nodeRun.findMany({
+              where: { runId, nodeId: node.id },
+              orderBy: { startedAt: 'desc' },
+              take: 1,
+            });
+            
+            if (existingRuns.length > 0) {
+              await prisma.nodeRun.update({
+                where: { id: existingRuns[0].id },
+                data: {
+                  status: finalStatus,
+                  durationMs,
+                  outputSummary: finalStatus === "success" ? outSum : undefined,
+                  error: finalStatus === "failed" ? outSum : undefined,
+                  endedAt: new Date(),
+                }
+              });
+            }
+          } catch (e) {}
+        };
+
+        if (node.type === "video") {
         // Ensure video nodes propagate their file as output if no output is set
         if (!node.data.output && node.data.file) {
           node.data.output = node.data.file;
         }
-        continue;
+        await markComplete();
+        return;
       }
 
       if (node.type === "image") {
@@ -132,7 +197,8 @@ export const runWorkflow = task({
         if (!node.data.output && node.data.file) {
           node.data.output = node.data.file;
         }
-        continue;
+        await markComplete();
+        return;
       }
 
       if (node.type === "text") {
@@ -146,7 +212,8 @@ export const runWorkflow = task({
           }
         }
         node.data.output = node.data.text || "";
-        continue;
+        await markComplete();
+        return;
       }
 
       if (node.type === "crop") {
@@ -164,7 +231,10 @@ export const runWorkflow = task({
 
         if (!sourceOutput && !sourceFile) {
           node.data.output = "Error: No image input connected";
-          continue;
+          isError = true;
+          errorMessage = node.data.output;
+          await markComplete();
+          return;
         }
 
         try {
@@ -185,7 +255,10 @@ export const runWorkflow = task({
 
           if (clampedW <= 0 || clampedH <= 0) {
             node.data.output = "Error: Invalid crop dimensions";
-            continue;
+            isError = true;
+            errorMessage = node.data.output;
+            await markComplete();
+            return;
           }
 
           const croppedBuffer = await sharp(imgBuffer)
@@ -200,8 +273,11 @@ export const runWorkflow = task({
         } catch (error: any) {
           logger.error(`Crop Node ${node.id} failed`, { error: error.message });
           node.data.output = `Error: ${error.message}`;
+          isError = true;
+          errorMessage = error.message;
         }
-        continue;
+        await markComplete();
+        return;
       }
 
       if (node.type === "frame") {
@@ -221,7 +297,10 @@ export const runWorkflow = task({
 
         if (!sourceOutput && !sourceVideoUrl && !sourceFile && !node.data.videoUrl) {
           node.data.output = "Error: No video URL provided";
-          continue;
+          isError = true;
+          errorMessage = node.data.output;
+          await markComplete();
+          return;
         }
 
         let timestamp = node.data.timestamp || 0;
@@ -269,8 +348,11 @@ export const runWorkflow = task({
         } catch (error: any) {
           logger.error(`Extract Frame Node ${node.id} failed`, { error: error.message });
           node.data.output = `Error: ${error.message}`;
+          isError = true;
+          errorMessage = error.message;
         }
-        continue;
+        await markComplete();
+        return;
       }
 
       if (node.type === "llm") {
@@ -278,7 +360,10 @@ export const runWorkflow = task({
         if (!apiKey) {
           logger.error("Missing GEMINI_API_KEY");
           node.data.output = "Error: Missing GEMINI_API_KEY";
-          continue;
+          isError = true;
+          errorMessage = node.data.output;
+          await markComplete();
+          return;
         }
 
         const incomingEdges = edges.filter((e: any) => e.target === node.id);
@@ -289,7 +374,7 @@ export const runWorkflow = task({
 
         for (const edge of incomingEdges) {
           const sourceNode = orderedNodes.find((n: any) => n.id === edge.source);
-          if (!sourceNode) continue;
+          if (!sourceNode) return;
 
           const sourceOutput = sourceNode.data.output || sourceNode.data.text || "";
 
@@ -304,60 +389,100 @@ export const runWorkflow = task({
 
         if (!promptText) {
           node.data.output = "Error: No user message provided";
-          continue;
+          isError = true;
+          errorMessage = node.data.output;
+          await markComplete();
+          return;
         }
 
         try {
-          const modelId = node.data.model || "gemini-2.5-flash";
-          const genAI = new GoogleGenerativeAI(apiKey);
-          const model = genAI.getGenerativeModel({ 
-            model: modelId,
-            ...(systemText ? { systemInstruction: systemText } : {})
-          });
-
-          const parts: any[] = [{ text: promptText }];
-
-          if (imageUrl) {
-            try {
-              let base64: string;
-              let contentType: string;
-
+          const modelId = node.data.model || "gpt-4o";
+          
+          if (modelId.startsWith("gpt-")) {
+            const openAiKey = process.env.OPENAI_API_KEY;
+            if (!openAiKey) throw new Error("Missing OPENAI_API_KEY");
+            
+            const openai = new OpenAI({ apiKey: openAiKey });
+            
+            const messages: any[] = [];
+            if (systemText) {
+              messages.push({ role: "system", content: systemText });
+            }
+            
+            const content: any[] = [{ type: "text", text: promptText }];
+            if (imageUrl) {
               if (imageUrl.startsWith("data:")) {
-                const match = imageUrl.match(/^data:(.*?);base64,([\s\S]*)$/);
-                contentType = match?.[1] || "image/png";
-                base64 = match?.[2] || "";
+                content.push({ type: "image_url", image_url: { url: imageUrl } });
               } else {
                 const imgBuffer = await resolveToBuffer(imageUrl);
-                base64 = imgBuffer.toString("base64");
-                contentType = "image/png";
+                const base64 = imgBuffer.toString("base64");
+                content.push({ type: "image_url", image_url: { url: `data:image/png;base64,${base64}` } });
               }
-
-              parts.push({
-                inlineData: {
-                  mimeType: contentType,
-                  data: base64
-                }
-              });
-            } catch (imgErr) {
-              logger.warn("Failed to fetch image for LLM", { imageUrl: imageUrl.substring(0, 100), error: imgErr });
             }
-          }
+            messages.push({ role: "user", content });
+            
+            const response = await openai.chat.completions.create({
+              model: modelId,
+              messages,
+            });
+            
+            node.data.output = response.choices[0]?.message?.content || "";
+          } else {
+            // Gemini Logic
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({ 
+              model: modelId,
+              ...(systemText ? { systemInstruction: systemText } : {})
+            });
 
-          const result = await model.generateContent(parts);
-          const response = result.response;
-          node.data.output = response.text();
+            const parts: any[] = [{ text: promptText }];
+
+            if (imageUrl) {
+              try {
+                let base64: string;
+                let contentType: string;
+
+                if (imageUrl.startsWith("data:")) {
+                  const match = imageUrl.match(/^data:(.*?);base64,([\s\S]*)$/);
+                  contentType = match?.[1] || "image/png";
+                  base64 = match?.[2] || "";
+                } else {
+                  const imgBuffer = await resolveToBuffer(imageUrl);
+                  base64 = imgBuffer.toString("base64");
+                  contentType = "image/png";
+                }
+
+                parts.push({
+                  inlineData: {
+                    mimeType: contentType,
+                    data: base64
+                  }
+                });
+              } catch (imgErr) {
+                logger.warn("Failed to fetch image for LLM", { imageUrl: imageUrl.substring(0, 100), error: imgErr });
+              }
+            }
+
+            const result = await model.generateContent(parts);
+            const response = result.response;
+            node.data.output = response.text();
+          }
           
           logger.info(`LLM Node ${node.id} completed`, { model: modelId });
         } catch (error: any) {
           logger.error(`LLM Node ${node.id} failed`, { error: error.message });
           node.data.output = `Error: ${error.message}`;
+          isError = true;
+          errorMessage = error.message;
         }
+        await markComplete();
       }
+      }));
     }
     
     logger.info("Workflow Execution Complete");
     
-    return { success: true, executionOrder: orderedNodes };
+    return { success: true, executionOrder: orderedNodes, executionLayers: layeredNodes };
   },
 });
 

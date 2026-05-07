@@ -2,22 +2,28 @@ import { create } from "zustand";
 
 interface RunStore {
   runningNodeIds: Set<string>;
-  /** The single node currently being executed */
-  currentNodeId: string | null;
-  /** Returns true if ANY node is running */
-  isRunning: boolean;
+  activeNodeIds: Set<string>;
   setRunningIds: (ids: string[]) => void;
-  setCurrentNodeId: (id: string | null) => void;
+  setActiveNodeIds: (ids: string[]) => void;
+  addActiveNodeId: (id: string) => void;
+  removeActiveNodeId: (id: string) => void;
   clearRunning: () => void;
 }
 
 export const useRunStore = create<RunStore>((set) => ({
   runningNodeIds: new Set(),
-  currentNodeId: null,
-  isRunning: false,
-  setRunningIds: (ids) =>
-    set({ runningNodeIds: new Set(ids), isRunning: ids.length > 0 }),
-  setCurrentNodeId: (id) =>
-    set({ currentNodeId: id }),
-  clearRunning: () => set({ runningNodeIds: new Set(), currentNodeId: null, isRunning: false }),
+  activeNodeIds: new Set(),
+  setRunningIds: (ids) => set({ runningNodeIds: new Set(ids) }),
+  setActiveNodeIds: (ids) => set({ activeNodeIds: new Set(ids) }),
+  addActiveNodeId: (id) => set((state) => {
+    const next = new Set(state.activeNodeIds);
+    next.add(id);
+    return { activeNodeIds: next };
+  }),
+  removeActiveNodeId: (id) => set((state) => {
+    const next = new Set(state.activeNodeIds);
+    next.delete(id);
+    return { activeNodeIds: next };
+  }),
+  clearRunning: () => set({ runningNodeIds: new Set(), activeNodeIds: new Set() }),
 }));

@@ -10,7 +10,7 @@ export default function RunSelectionButton() {
   const allNodes = useNodes();
   const allEdges = useEdges();
   const [isRunningLocal, setIsRunningLocal] = useState(false);
-  const { setRunningIds, setCurrentNodeId, clearRunning } = useRunStore();
+  const { setRunningIds, addActiveNodeId, removeActiveNodeId, clearRunning } = useRunStore();
 
   const selectedNodes = allNodes.filter((n) => n.selected);
   const selectedIds = new Set(selectedNodes.map((n) => n.id));
@@ -42,7 +42,7 @@ export default function RunSelectionButton() {
       });
 
       // Highlight the start node during the API call
-      setCurrentNodeId(startNodeId);
+      addActiveNodeId(startNodeId);
 
       const response = await fetch("/api/run", {
         method: "POST",
@@ -56,24 +56,20 @@ export default function RunSelectionButton() {
 
       if (!response.ok) throw new Error("Failed to run selection");
 
+      removeActiveNodeId(startNodeId);
+
       const result = await response.json();
 
       if (result.success && result.result?.executionOrder) {
         const executedNodes: Node[] = result.result.executionOrder;
         
-        // Animate through execution order one node at a time
+        // Apply final data immediately without artificial replay delay
         for (const en of executedNodes) {
-          setCurrentNodeId(en.id);
-          
           setNodes((prev) =>
             prev.map((node) => {
               return node.id === en.id ? { ...node, data: en.data } : node;
             })
           );
-
-          await new Promise(resolve => setTimeout(resolve, 400));
-          setCurrentNodeId(null);
-          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
     } catch (err) {

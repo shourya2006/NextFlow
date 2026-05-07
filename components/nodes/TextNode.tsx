@@ -11,8 +11,8 @@ export default function TextNode({ id, data, selected }: { id: string, data: any
   const { setNodes } = useReactFlow();
   const edges = useEdges();
   const nodes = useNodes();
-  const currentNodeId = useRunStore((s) => s.currentNodeId);
-  const isRunning = currentNodeId === id;
+  const isRunning = useRunStore((s) => s.activeNodeIds.has(id));
+  
   const t = useNodeTheme();
 
   const textEdge = edges.find(e => e.target === id && e.targetHandle === "text");
