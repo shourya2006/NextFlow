@@ -416,6 +416,41 @@ export default function RunWorkflowButton({
             );
           }
 
+          // Backfill: ensure ALL executed nodes appear in the history store.
+          // This covers LLM/crop/frame nodes that polling might have missed.
+          const currentRun = useHistoryStore.getState().runs.find((r) => r.id === runId);
+          const existingNodeIds = new Set(currentRun?.nodeRuns?.map((nr) => nr.nodeId) || []);
+
+          for (const en of executedNodes) {
+            if (!existingNodeIds.has(en.id)) {
+              // Node was never synced — add it with completed status
+              addNodeRun(runId, {
+                nodeId: en.id,
+                label: en.data?.label || en.id,
+                type: en.type || "unknown",
+                status: en.data?.output?.toString().startsWith("Error:") ? "failed" : "success",
+                startedAt: Date.now(),
+                endedAt: Date.now(),
+                durationMs: 0,
+                outputSummary: en.data?.output?.toString()?.substring(0, 200) || "",
+                executionOrder: executedNodes.indexOf(en),
+              });
+            } else {
+              // Node exists but may still be "running" — mark it completed
+              const existingNodeRun = currentRun?.nodeRuns?.find((nr) => nr.nodeId === en.id);
+              if (existingNodeRun && existingNodeRun.status === "running") {
+                const isError = en.data?.output?.toString().startsWith("Error:");
+                updateNodeRun(runId, en.id, {
+                  status: isError ? "failed" : "success",
+                  endedAt: Date.now(),
+                  durationMs: Date.now() - existingNodeRun.startedAt,
+                  outputSummary: !isError ? en.data?.output?.toString()?.substring(0, 200) : undefined,
+                  error: isError ? en.data?.output?.toString()?.substring(0, 200) : undefined,
+                });
+              }
+            }
+          }
+
           const endedAt = Date.now();
           const status = result.success ? "completed" : "failed";
           updateRun(runId, { status, endedAt });
