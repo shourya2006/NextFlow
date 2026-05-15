@@ -6,7 +6,7 @@ import sharp from "sharp";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { prisma } from "../lib/prisma";
+
 
 /**
  * Resolves a URL (data: or http/https) into a Buffer.
@@ -64,6 +64,7 @@ export const runWorkflow = task({
     const nodes = payload.nodes || [];
     const edges = payload.edges || [];
     const runId = payload.runId;
+    const baseUrl = payload.baseUrl;
 
     const inDegree: Record<string, number> = {};
     const adjList: Record<string, string[]> = {};
@@ -123,29 +124,30 @@ export const runWorkflow = task({
     for (const levelNodes of layeredNodes) {
       await Promise.all(levelNodes.map(async (node: any) => {
         const startedAtMs = Date.now();
-        if (runId) {
+        // Track node start via API callback (works in production on Trigger.dev cloud)
+        if (runId && baseUrl) {
           try {
-            await prisma.nodeRun.create({
-              data: {
-                runId,
+            await fetch(`${baseUrl}/api/runs/${runId}/nodes`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
                 nodeId: node.id,
                 label: node.data?.label || node.id,
                 type: node.type || "unknown",
-                status: "running",
                 executionOrder: executionOrder.indexOf(node.id) !== -1 ? executionOrder.indexOf(node.id) : 0,
-              }
+              }),
             });
           } catch (e) {
-            // Might already exist if Phase 1 tracked it, so ignore error
+            logger.warn("Failed to track node start", { nodeId: node.id, error: e });
           }
         }
 
         let isError = false;
         let errorMessage = "";
 
-        // Function to handle completion
+        // Function to handle completion via API callback
         const markComplete = async () => {
-          if (!runId) return;
+          if (!runId || !baseUrl) return;
           const endedAtMs = Date.now();
           const durationMs = endedAtMs - startedAtMs;
           const finalStatus = isError ? "failed" : "success";
@@ -153,25 +155,21 @@ export const runWorkflow = task({
           if (outSum.length > 200) outSum = outSum.substring(0, 200) + "...";
           
           try {
-            const existingRuns = await prisma.nodeRun.findMany({
-              where: { runId, nodeId: node.id },
-              orderBy: { startedAt: 'desc' },
-              take: 1,
+            await fetch(`${baseUrl}/api/runs/${runId}/nodes`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                nodeId: node.id,
+                status: finalStatus,
+                endedAt: Date.now(),
+                durationMs,
+                outputSummary: finalStatus === "success" ? outSum : undefined,
+                error: finalStatus === "failed" ? outSum : undefined,
+              }),
             });
-            
-            if (existingRuns.length > 0) {
-              await prisma.nodeRun.update({
-                where: { id: existingRuns[0].id },
-                data: {
-                  status: finalStatus,
-                  durationMs,
-                  outputSummary: finalStatus === "success" ? outSum : undefined,
-                  error: finalStatus === "failed" ? outSum : undefined,
-                  endedAt: new Date(),
-                }
-              });
-            }
-          } catch (e) {}
+          } catch (e) {
+            logger.warn("Failed to track node completion", { nodeId: node.id, error: e });
+          }
         };
 
         if (node.type === "video") {

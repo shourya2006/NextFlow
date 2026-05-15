@@ -17,7 +17,14 @@ export async function POST(req: Request) {
     console.log("Starting Node:", parsed.data.startNodeId);
     console.log("Nodes Count:", parsed.data.nodes.length);
 
-    const handle = await tasks.trigger("workflow-run", parsed.data);
+    // Pass the app's base URL so the trigger task can call back to our API
+    const url = new URL(req.url);
+    const baseUrl = `${url.protocol}//${url.host}`;
+
+    const handle = await tasks.trigger("workflow-run", {
+      ...parsed.data,
+      baseUrl,
+    });
     
     const run = await runs.poll(handle.id);
 
