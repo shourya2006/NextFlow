@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
 import { workflowUpdateSchema } from '@/lib/schemas';
-import fs from 'fs/promises';
-import path from 'path';
+import { readDefaultWorkflow } from '@/lib/defaultWorkflow';
 
 export async function GET(
   request: Request,
@@ -13,14 +12,15 @@ export async function GET(
     const { userId } = await auth();
     const { id } = await params;
 
-    const effectiveId = id === 'default' && userId ? `default-${userId}` : id;
+    const effectiveId = id === 'default' ? `default-${userId}` : id;
 
-    const workflow = await prisma.workflow.findUnique({
-      where: { id: effectiveId }
-    });
-    
+    // Signed-out visitors can only see the default template, never a stored row
+    const workflow = userId
+      ? await prisma.workflow.findUnique({ where: { id: effectiveId } })
+      : null;
+
     if (workflow) {
-      if (workflow.userId !== null && workflow.userId !== userId) {
+      if (workflow.userId !== userId) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
       }
       return NextResponse.json(workflow);
@@ -28,13 +28,10 @@ export async function GET(
 
     if (id === 'default') {
       try {
-        const nodesData = await fs.readFile(path.join(process.cwd(), 'data', 'nodes.json'), 'utf-8');
-        const edgesData = await fs.readFile(path.join(process.cwd(), 'data', 'edges.json'), 'utf-8');
         return NextResponse.json({
           id: 'default',
           title: 'Default Workflow',
-          nodes: JSON.parse(nodesData),
-          edges: JSON.parse(edgesData),
+          ...(await readDefaultWorkflow()),
           userId: null,
           createdAt: new Date(0).toISOString(),
           updatedAt: new Date(0).toISOString(),
@@ -43,6 +40,10 @@ export async function GET(
         console.error("Failed to read default workflow data:", err);
         return NextResponse.json({ error: "Default workflow not available" }, { status: 404 });
       }
+    }
+
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     return NextResponse.json({ error: "Workflow not found" }, { status: 404 });
@@ -76,10 +77,14 @@ export async function PUT(
     }
 
     const existing = await prisma.workflow.findUnique({ where: { id: effectiveId } });
-    if (existing && existing.userId !== null && existing.userId !== userId) {
+    if (existing && existing.userId !== userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
-    
+    // Only the user's own default workflow can be created through this route
+    if (!existing && id !== 'default') {
+      return NextResponse.json({ error: "Workflow not found" }, { status: 404 });
+    }
+
     const data: any = {};
     if (parsed.data.title !== undefined) data.title = parsed.data.title;
     if (parsed.data.nodes !== undefined) data.nodes = parsed.data.nodes;
@@ -87,15 +92,13 @@ export async function PUT(
     
     const workflow = await prisma.workflow.upsert({
       where: { id: effectiveId },
-      update: {
-        ...data,
-        userId: userId,
-      },
+      update: data,
       create: {
         id: effectiveId,
         title: parsed.data.title || "Default Workflow",
-        nodes: parsed.data.nodes || [],
-        edges: parsed.data.edges || [],
+        // A title-only update (rename) must not replace the template with an empty canvas
+        nodes: parsed.data.nodes ?? (await readDefaultWorkflow()).nodes,
+        edges: parsed.data.edges ?? (await readDefaultWorkflow()).edges,
         userId: userId,
       }
     });
@@ -125,7 +128,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (existing.userId !== null && existing.userId !== userId) {
+    if (existing.userId !== userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

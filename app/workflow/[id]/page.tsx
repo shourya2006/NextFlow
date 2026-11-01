@@ -69,6 +69,8 @@ function WorkflowEditorInner({ id }: { id: string }) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [title, setTitle] = useState("Untitled");
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // ─── Undo / Redo history ───
   const historyRef = useRef<HistoryEntry[]>([]);
@@ -181,9 +183,12 @@ function WorkflowEditorInner({ id }: { id: string }) {
           if (data.nodes) setNodes(data.nodes);
           if (data.edges) setEdges(data.edges);
           if (data.title) setTitle(data.title);
+        } else {
+          setLoadFailed(true);
         }
       } catch (err) {
         console.error("Failed to load workflow", err);
+        setLoadFailed(true);
       } finally {
         setLoading(false);
       }
@@ -199,20 +204,31 @@ function WorkflowEditorInner({ id }: { id: string }) {
 
   // Auto-save when nodes, edges, or title change (with basic debounce)
   useEffect(() => {
-    if (loading) return;
+    // Never save after a failed load: the canvas is empty and would overwrite the real workflow
+    if (loading || loadFailed) return;
     const timeout = setTimeout(async () => {
       try {
-        await fetch(`/api/workflows/${id}`, {
+        const res = await fetch(`/api/workflows/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ nodes, edges, title }),
         });
+        if (res.ok) {
+          setSaveError(null);
+        } else if (res.status === 401) {
+          setSaveError("Sign in to save changes");
+        } else if (res.status === 413) {
+          setSaveError("Not saved: workflow is too large");
+        } else {
+          setSaveError("Changes not saved");
+        }
       } catch (e) {
         console.error("Failed to save workflow", e);
+        setSaveError("Changes not saved");
       }
     }, 1000);
     return () => clearTimeout(timeout);
-  }, [nodes, edges, title, id, loading]);
+  }, [nodes, edges, title, id, loading, loadFailed]);
 
   const handleAddNode = useCallback(
     (nodeType: string) => {
@@ -338,6 +354,22 @@ function WorkflowEditorInner({ id }: { id: string }) {
           </div>
         )}
 
+        {/* Load failure — blocks the empty canvas so nothing can be edited or saved over the workflow */}
+        {loadFailed && (
+          <div className={`absolute inset-0 z-20 flex items-center justify-center ${theme === 'dark' ? 'bg-[#0a0a0a]' : 'bg-[#f5f5f5]'}`}>
+            <div className="flex flex-col items-center gap-3 px-4 text-center">
+              <p className="text-[15px] font-medium">Couldn&apos;t load this workflow</p>
+              <p className="text-[13px] text-zinc-500">Nothing was changed. Check that you&apos;re signed in, then try again.</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="rounded-lg bg-[#2563eb] hover:bg-[#3b82f6] text-white px-4 py-2 text-[13px] font-medium transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* React Flow Canvas — title bar, toolbar, and RunSelectionButton all live INSIDE here */}
         <div className="absolute inset-0 z-0">
           <ReactFlow
@@ -388,6 +420,11 @@ function WorkflowEditorInner({ id }: { id: string }) {
                   style={{ width: `${Math.max(8, title.length) + 1}ch` }}
                   placeholder="Workflow title"
                 />
+                {saveError && (
+                  <span role="alert" className="text-xs font-medium text-rose-500 whitespace-nowrap">
+                    {saveError}
+                  </span>
+                )}
               </div>
             </Panel>
 

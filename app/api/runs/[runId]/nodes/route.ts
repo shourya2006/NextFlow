@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canWriteRun } from "@/lib/runAuth";
 
 // POST /api/runs/:runId/nodes — Create a node run record
 export async function POST(
@@ -8,6 +9,10 @@ export async function POST(
 ) {
   try {
     const { runId } = await params;
+    if (!(await canWriteRun(req, runId))) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
 
     const nodeRun = await prisma.nodeRun.create({
@@ -38,6 +43,10 @@ export async function PUT(
 ) {
   try {
     const { runId } = await params;
+    if (!(await canWriteRun(req, runId))) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
 
     // Find the node run by runId + nodeId

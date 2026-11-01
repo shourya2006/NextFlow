@@ -4,6 +4,7 @@ import { useReactFlow, useEdges, useStore } from "@xyflow/react";
 import { useRunStore } from "@/store/runStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { getConnectedComponent } from "./utils";
+import { uploadToTransloadit } from "@/lib/transloadit";
 import type { Node, Edge } from "@xyflow/react";
 
 export default function RunWorkflowButton({
@@ -87,6 +88,10 @@ export default function RunWorkflowButton({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ workflowId: currentWorkflowId }),
           });
+          if (res.status === 401) {
+            alert("Please sign in to run workflows.");
+            return;
+          }
           if (res.ok) {
             const dbRun = await res.json();
             runId = dbRun.id;
@@ -105,7 +110,6 @@ export default function RunWorkflowButton({
         nodeRuns: [],
       } as any);
 
-      const transloaditKey = process.env.NEXT_PUBLIC_TRANSLOADIT_AUTH_KEY;
       let graphChanged = false;
 
       // Helper to handle node execution tracking
@@ -235,7 +239,6 @@ export default function RunWorkflowButton({
           }
 
           if (n.type === "image" && n.data.file && !n.data.output) {
-            if (!transloaditKey) return;
             addActiveNodeId(n.id);
             const startedAt = await trackNodeStart(n);
 
@@ -243,41 +246,7 @@ export default function RunWorkflowButton({
               const res = await fetch(n.data.file as string);
               const blob = await res.blob();
 
-              const formData = new FormData();
-              formData.append("params", JSON.stringify({
-                auth: { key: transloaditKey },
-                steps: { resize: { robot: "/image/resize" } }
-              }));
-              formData.append("file", blob, (n.data.fileName as string) || "upload.png");
-
-              const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
-                method: "POST",
-                body: formData
-              });
-
-              if (!uploadRes.ok) {
-                await trackNodeEnd(n.id, startedAt, "failed", undefined, "Upload failed");
-                removeActiveNodeId(n.id);
-                return;
-              }
-              let uploadResult = await uploadRes.json();
-
-              if (uploadResult.ok === "ASSEMBLY_EXECUTING" && uploadResult.assembly_ssl_url) {
-                let attempts = 0;
-                while (uploadResult.ok === "ASSEMBLY_EXECUTING" && attempts < 20) {
-                  await new Promise(resolve => setTimeout(resolve, 1000));
-                  const pollRes = await fetch(uploadResult.assembly_ssl_url);
-                  uploadResult = await pollRes.json();
-                  attempts++;
-                }
-              }
-
-              let sslUrl = uploadResult?.results?.resize?.[0]?.ssl_url;
-              if (!sslUrl) sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
-              if (!sslUrl) {
-                const resultsKeys = Object.keys(uploadResult?.results || {});
-                if (resultsKeys.length > 0) sslUrl = uploadResult.results[resultsKeys[0]]?.[0]?.ssl_url;
-              }
+              const sslUrl = await uploadToTransloadit("image", blob, (n.data.fileName as string) || "upload.png");
 
               if (sslUrl) {
                 currentNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
@@ -293,7 +262,6 @@ export default function RunWorkflowButton({
           }
 
           if (n.type === "video" && n.data.file && !n.data.output) {
-            if (!transloaditKey) return;
             addActiveNodeId(n.id);
             const startedAt = await trackNodeStart(n);
 
@@ -301,41 +269,7 @@ export default function RunWorkflowButton({
               const res = await fetch(n.data.file as string);
               const blob = await res.blob();
 
-              const formData = new FormData();
-              formData.append("params", JSON.stringify({
-                auth: { key: transloaditKey },
-                steps: { encode: { robot: "/video/encode", preset: "iphone-high" } }
-              }));
-              formData.append("file", blob, (n.data.fileName as string) || "upload.mp4");
-
-              const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
-                method: "POST",
-                body: formData
-              });
-
-              if (!uploadRes.ok) {
-                await trackNodeEnd(n.id, startedAt, "failed", undefined, "Upload failed");
-                removeActiveNodeId(n.id);
-                return;
-              }
-              let uploadResult = await uploadRes.json();
-
-              if (uploadResult.ok === "ASSEMBLY_EXECUTING" && uploadResult.assembly_ssl_url) {
-                let attempts = 0;
-                while (uploadResult.ok === "ASSEMBLY_EXECUTING" && attempts < 60) {
-                  await new Promise(resolve => setTimeout(resolve, 2000));
-                  const pollRes = await fetch(uploadResult.assembly_ssl_url);
-                  uploadResult = await pollRes.json();
-                  attempts++;
-                }
-              }
-
-              let sslUrl = uploadResult?.results?.encode?.[0]?.ssl_url;
-              if (!sslUrl) sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
-              if (!sslUrl) {
-                const resultsKeys = Object.keys(uploadResult?.results || {});
-                if (resultsKeys.length > 0) sslUrl = uploadResult.results[resultsKeys[0]]?.[0]?.ssl_url;
-              }
+              const sslUrl = await uploadToTransloadit("video", blob, (n.data.fileName as string) || "upload.mp4");
 
               if (sslUrl) {
                 currentNodes[i] = { ...n, data: { ...n.data, output: sslUrl } };
@@ -357,7 +291,7 @@ export default function RunWorkflowButton({
           setNodes((prev) =>
             prev.map(node => {
               const updated = currentNodes.find(un => un.id === node.id);
-              return updated ? { ...node, data: updated.data } : node;
+              return updated ? { ...node, data: { ...node.data, output: updated.data.output } } : node;
             })
           );
         }
@@ -412,7 +346,7 @@ export default function RunWorkflowButton({
           // Apply final node data to canvas
           for (const en of executedNodes) {
             setNodes((prev) =>
-              prev.map(node => node.id === en.id ? { ...node, data: en.data } : node)
+              prev.map(node => node.id === en.id ? { ...node, data: { ...node.data, output: en.data.output } } : node)
             );
           }
 
@@ -464,41 +398,12 @@ export default function RunWorkflowButton({
           (async () => {
             for (const executedNode of executedNodes) {
               if (executedNode.type === "image" && executedNode.data.output && (executedNode.data.output as string).startsWith("data:")) {
-                if (!transloaditKey) continue;
                 try {
                   const dataUrl = executedNode.data.output as string;
                   const res = await fetch(dataUrl);
                   const blob = await res.blob();
 
-                  const formData = new FormData();
-                  formData.append("params", JSON.stringify({
-                    auth: { key: transloaditKey },
-                    steps: { resize: { robot: "/image/resize" } }
-                  }));
-                  formData.append("file", blob, `image_${executedNode.id}.png`);
-
-                  const uploadRes = await fetch("https://api2.transloadit.com/assemblies?wait=true", {
-                    method: "POST",
-                    body: formData
-                  });
-
-                  let uploadResult = await uploadRes.json();
-                  if (uploadResult.ok === "ASSEMBLY_EXECUTING" && uploadResult.assembly_ssl_url) {
-                    let attempts = 0;
-                    while (uploadResult.ok === "ASSEMBLY_EXECUTING" && attempts < 20) {
-                      await new Promise(resolve => setTimeout(resolve, 1000));
-                      const pollRes = await fetch(uploadResult.assembly_ssl_url);
-                      uploadResult = await pollRes.json();
-                      attempts++;
-                    }
-                  }
-
-                  let sslUrl = uploadResult?.results?.resize?.[0]?.ssl_url;
-                  if (!sslUrl) sslUrl = uploadResult?.uploads?.[0]?.ssl_url;
-                  if (!sslUrl) {
-                    const keys = Object.keys(uploadResult?.results || {});
-                    if (keys.length > 0) sslUrl = uploadResult.results[keys[0]]?.[0]?.ssl_url;
-                  }
+                  const sslUrl = await uploadToTransloadit("image", blob, `image_${executedNode.id}.png`);
 
                   if (sslUrl) {
                     setNodes((prev) =>

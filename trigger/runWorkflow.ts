@@ -6,6 +6,7 @@ import sharp from "sharp";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { safeFetch } from "../lib/safeFetch";
 
 
 /**
@@ -23,18 +24,18 @@ async function resolveToBuffer(url: string): Promise<Buffer> {
   }
 
   // HTTP/HTTPS URL — fetch and validate
-  const res = await fetch(url);
-  if (!res.ok) {
+  const res = await safeFetch(url);
+  if (res.status < 200 || res.status >= 300) {
     throw new Error(`Fetch failed with status ${res.status}: ${res.statusText}`);
   }
 
-  const contentType = res.headers.get("content-type") || "";
+  const contentType = res.contentType;
   // Reject HTML/XML error pages that aren't actual media
   if (contentType.includes("text/html") || contentType.includes("text/xml") || contentType.includes("application/xml")) {
     throw new Error(`URL returned non-media content type: ${contentType}`);
   }
 
-  return Buffer.from(await res.arrayBuffer());
+  return res.body;
 }
 
 /**
@@ -65,6 +66,10 @@ export const runWorkflow = task({
     const edges = payload.edges || [];
     const runId = payload.runId;
     const baseUrl = payload.baseUrl;
+    const callbackHeaders = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${payload.callbackToken}`,
+    };
 
     const inDegree: Record<string, number> = {};
     const adjList: Record<string, string[]> = {};
@@ -129,7 +134,7 @@ export const runWorkflow = task({
           try {
             await fetch(`${baseUrl}/api/runs/${runId}/nodes`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: callbackHeaders,
               body: JSON.stringify({
                 nodeId: node.id,
                 label: node.data?.label || node.id,
@@ -157,7 +162,7 @@ export const runWorkflow = task({
           try {
             await fetch(`${baseUrl}/api/runs/${runId}/nodes`, {
               method: "PUT",
-              headers: { "Content-Type": "application/json" },
+              headers: callbackHeaders,
               body: JSON.stringify({
                 nodeId: node.id,
                 status: finalStatus,

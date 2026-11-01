@@ -54,6 +54,7 @@ You will need to set up and configure keys for:
 - **Neon / PostgreSQL**: Database connection string for Prisma.
 - **Trigger.dev**: Secret key for background workers.
 - **Gemini**: API key for the LLM node.
+- **Transloadit**: Auth key and secret for media uploads. Uploads are signed on the server, so also enable "Require signature authentication" in your Transloadit account.
 
 ### 4. Setup Database
 
